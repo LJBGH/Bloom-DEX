@@ -1,0 +1,59 @@
+name: bld-dex-log-local
+
+services:
+  # ==============================
+  # OpenTelemetry Collector
+  # ==============================
+  bld-opentelemetry:
+    image: otel/opentelemetry-collector:0.114.0
+    container_name: bld-opentelemetry
+    restart: always
+    command: ["--config=/etc/otelcol/config.yaml"]
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Collector 自身的 metrics 端口（Prometheus 抓取用）
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      OTLP_GRPC_PORT: 4317
+      OTLP_HTTP_PORT: 4318
+    networks:
+      - bld-dex
+
+  # ==============================
+  # Prometheus
+  # ==============================
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - bld-dex
+
+  # ==============================
+  # Grafana
+  # ==============================
+  grafana:
+    image: grafana/grafana:10.3.3
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - bld-dex
+
+volumes:
+  grafana_data:  # 持久化 Grafana 配置和仪表盘
+
+networks:
+  bld-dex:

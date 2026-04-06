@@ -1,0 +1,11 @@
+syntax = "v1"
+
+type HealthzResp {
+	Status string `json:"status"`
+}
+
+service ordersapi-api {
+	@handler HealthzHandler
+	get /healthz returns (HealthzResp)
+}
+

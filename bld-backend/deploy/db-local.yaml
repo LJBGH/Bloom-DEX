@@ -1,0 +1,175 @@
+# 项目名称（docker compose ps 时会看到）
+name: bld-dex-db-local
+
+services:
+  # ==============================
+  # Zookeeper（Kafka 依赖组件）
+  # ==============================
+  bld-zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: bld-zookeeper
+    restart: always
+
+    # 暴露端口（一般不需要对外，但方便调试）
+    ports:
+      - "2181:2181"
+
+    environment:
+      # Zookeeper 对外提供服务的端口
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+      # 心跳时间（毫秒）
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - bld-dex
+
+  # ==============================
+  # Kafka Broker
+  # ==============================
+  bld-kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: bld-kafka
+    restart: always
+
+    # Kafka 依赖 Zookeeper
+    depends_on:
+      - bld-zookeeper
+
+    ports:
+      # 暴露给宿主机（本地开发用）
+      - "9092:9092"
+
+    environment:
+      # Broker 唯一 ID（单节点写 1 就行）
+      KAFKA_BROKER_ID: 1
+
+      # 连接 Zookeeper（使用服务名）
+      KAFKA_ZOOKEEPER_CONNECT: bld-zookeeper:2181
+
+      # ==============================
+      # 🔥 Kafka 核心配置（重点理解）
+      # ==============================
+
+      # Kafka 实际监听的地址（绑定所有网卡）
+      # 这里定义了两个 listener：
+      # 1. PLAINTEXT -> 给宿主机访问（9092）
+      # 2. PLAINTEXT_INTERNAL -> 给 Docker 内部访问（29092）
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+
+      # Kafka 对外“告诉客户端”的地址（非常关键！！）
+      # 不同客户端拿到不同地址：
+      # - 宿主机程序拿到 localhost:9092
+      # - 容器内部程序拿到 kafka:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://bld-kafka:29092
+
+      # 定义 listener 名称和协议的映射关系
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+
+      # Broker 之间通信使用哪个 listener（单机也要配）
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+
+      # Kafka 内部 topic 副本数（单节点必须为 1；留空会导致 __consumer_offsets 无法创建，消费者报 Offset's topic has not yet been created）
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    networks:
+      - bld-dex
+
+  # ==============================
+  # Kafka UI（可视化工具）
+  # ==============================
+  bld-kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: bld-kafka-ui
+    restart: always
+
+    depends_on:
+      - bld-kafka
+
+    ports:
+      # 访问 UI：http://localhost:8082
+      - "9001:8080"
+
+    environment:
+      # 集群名称（UI 展示用）
+      KAFKA_CLUSTERS_0_NAME: local
+
+      # 🔥 必须使用 Kafka 内部地址（不能写 localhost）
+      # 因为 kafka-ui 运行在容器里
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: bld-kafka:29092
+    networks:
+      - bld-dex
+
+  # ==============================
+  # Mysql（服务）
+  # ==============================
+  bld-mysql:
+      container_name: bld-mysql
+      image: mysql:5.7.29
+      restart: always
+      volumes:
+        - ./data/mysql/my.cnf:/etc/my.cnf
+        - ./data/mysql/init:/docker-entrypoint-initdb.d/
+        - ./data/mysql/data:/var/lib/mysql
+      ports:
+        - "33060:3306"
+      environment:
+        MYSQL_ROOT_PASSWORD: 123456
+        MYSQL_LOWER_CASE_TABLE_NAMES: 1
+      healthcheck:
+        test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
+        interval: 5s
+        timeout: 3s
+        retries: 10
+        start_period: 30s
+      networks:
+        - bld-dex
+  # ==============================
+  # Redis（缓存服务）
+  # ==============================
+  bld-redis:
+    image: redis:latest
+    container_name: bld-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis/data:/data
+      - ./data/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    #command: ["redis-server", "--requirepass", "123456"]
+    networks:
+      - bld-dex
+  # ==============================
+  # etcd（服务）
+  # ==============================
+  bld-etcd:
+    image: public.ecr.aws/bitnami/etcd:3.5.14
+    container_name: bld-etcd
+    restart: always
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      # 🔥 同时 advertise 两个地址：内部用 bld-etcd，外部用 localhost
+      - ETCD_ADVERTISE_CLIENT_URLS=http://bld-etcd:2379,http://localhost:2379
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+    ports:
+      - "2379:2379"  # 必须保留，供宿主机访问
+    networks:
+      - bld-dex
+  # ==============================
+  # etcdkeeper（etcd 可视化工具）
+  # ==============================
+  bld-etcdkeeper:
+      image: evildecay/etcdkeeper:latest
+      container_name: bld-etcdkeeper
+      restart: always
+      ports:
+        - "9002:8080"
+      environment:
+        - ETCDKEEPER_ENDPOINTS=http://bld-etcd:2379
+      networks:
+        - bld-dex
+      depends_on:
+        - bld-etcd
+networks:
+  bld-dex:

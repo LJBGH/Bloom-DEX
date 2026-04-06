@@ -1,0 +1,11 @@
+Name: userapi
+Log:
+  Stat: false
+Host: 0.0.0.0
+Port: 9004
+Etcd:
+  Hosts:
+    - 127.0.0.1:2379
+  Key: userapi-api
+Mysql:
+  DataSource: root:123456@tcp(127.0.0.1:33060)/bld-dex?charset=utf8mb4&parseTime=true&loc=Local

@@ -1,0 +1,27 @@
+Name: exchange
+Log:
+  Mode: console
+  Encoding: plain
+  TimeFormat: 2006-01-02T15:04:05.000Z07:00
+  Stat: true
+Etcd:
+  Hosts:
+    - 127.0.0.1:2379
+  Key: exchange
+  TTL: 10
+Mysql:
+  DataSource: root:123456@tcp(127.0.0.1:33060)/bld-dex?charset=utf8mb4&parseTime=true&loc=Local
+# 与 walletapi Rpc.ListenOn 一致，用于成交后 ApplySpotTrade；留空则不调用钱包。
+WalletRpc:
+  Target: "127.0.0.1:9101"
+Kafka:
+  Brokers:
+    - localhost:9092
+  # 与 ordersapi 生产 topic 一致；亦可用 core/enum.TopicOrderInput
+  Topic: trade.order.create
+  GroupID: exchange-matcher
+  # 盘口快照，供 market-ws 消费推送（可与 enum.TopicDepthDelta 一致）
+  DepthTopic: market.depth.delta
+  # 公开成交，供 market-ws 推送「实时成交」
+  TradeTopic: market.trade.tick
+  Partitions: 8

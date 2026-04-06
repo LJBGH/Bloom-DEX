@@ -1,0 +1,23 @@
+Name: ordersapi-api
+Log:
+  Stat: false
+Host: 0.0.0.0
+Port: 9006
+Etcd:
+  Hosts:
+    - 127.0.0.1:2379
+  Key: ordersapi-api
+WalletRpc:
+  Etcd:
+    Hosts:
+      - 127.0.0.1:2379
+    Key: walletapi.rpc
+  NonBlock: true
+Mysql:
+  DataSource: root:123456@tcp(127.0.0.1:33060)/bld-dex?charset=utf8mb4&parseTime=true&loc=Local
+Kafka:
+  Brokers:
+    - localhost:9092
+  Topic: trade.order.create
+  Partitions: 8
+SnowflakeNode: 1

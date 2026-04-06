@@ -1,0 +1,406 @@
+/* 与订单簿 OrderBook.vue 一致的暗色交易主题 */
+:root {
+  --dex-bg-root: #0b0e11;
+  --dex-bg-panel: #14161a;
+  --dex-bg-elevated: #1e2026;
+  --dex-bg-input: #12141a;
+  --dex-border: #2a2e36;
+  --dex-border-soft: #3d4454;
+  --dex-text: #eaecef;
+  --dex-text-secondary: #848e9c;
+  --dex-text-muted: #5e6673;
+  --dex-accent: #f0b90b;
+  --dex-up: #0ecb81;
+  --dex-down: #f6465d;
+  --dex-danger: #f6465d;
+  --dex-radius: 8px;
+  --dex-font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--dex-font);
+  background: var(--dex-bg-root);
+  color: var(--dex-text);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  --topbar-row-h: 36px;
+  background: var(--dex-bg-panel);
+  color: var(--dex-text);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--dex-border);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.brand {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dex-text);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  min-height: var(--topbar-row-h);
+}
+
+.brand:hover {
+  color: var(--dex-accent);
+}
+
+.topbar-right {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.topbar-right button {
+  margin-top: 0;
+}
+
+.topbar-right .nav-link {
+  line-height: 1;
+  min-height: var(--topbar-row-h);
+  display: inline-flex;
+  align-items: center;
+}
+
+.sep {
+  color: var(--dex-border-soft);
+}
+
+.lang {
+  font-size: 12px;
+  color: var(--dex-text-secondary);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: var(--topbar-row-h);
+}
+
+.nav-link {
+  color: var(--dex-text-secondary);
+  text-decoration: none;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  min-height: var(--topbar-row-h);
+}
+
+.nav-link:hover {
+  color: var(--dex-text);
+}
+
+.nav-link.router-link-active {
+  color: var(--dex-accent);
+  font-weight: 700;
+}
+
+.page {
+  flex: 1;
+  padding: 16px 20px;
+}
+
+/* 现货页：铺满主区域；与顶栏留出空隙 */
+.trade-page {
+  padding: 16px 12px 20px;
+  margin: -16px -20px 0;
+  min-height: calc(100vh - 56px);
+}
+
+/* 现货路由内卡片与面板统一直角 */
+.trade-page .card {
+  border-radius: 0;
+}
+
+.card {
+  background: var(--dex-bg-panel);
+  border: 1px solid var(--dex-border);
+  border-radius: var(--dex-radius);
+  padding: 16px;
+  color: var(--dex-text);
+  box-shadow: none;
+}
+
+.card h2 {
+  margin-top: 0;
+  color: var(--dex-text);
+  font-size: 1.25rem;
+}
+
+.center-wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  padding-top: 12px;
+}
+
+.panel-title {
+  text-align: center;
+  font-size: 28px;
+  margin: 12px 0 6px;
+  color: var(--dex-text);
+  font-weight: 700;
+}
+
+.panel-subtitle {
+  text-align: center;
+  color: var(--dex-text-secondary);
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.auth-card {
+  max-width: 420px;
+  margin: 40px auto;
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+label {
+  font-size: 13px;
+  color: var(--dex-text-secondary);
+  margin-top: 6px;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--dex-border);
+  border-radius: 6px;
+  background: var(--dex-bg-input);
+  color: var(--dex-text);
+}
+
+input::placeholder {
+  color: var(--dex-text-muted);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--dex-accent);
+}
+
+button {
+  width: auto;
+  cursor: pointer;
+  background: var(--dex-accent);
+  color: #0b0e11;
+  border: none;
+  margin-top: 8px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 8px 14px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-card button {
+  width: 100%;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--dex-border);
+  padding: 8px;
+  text-align: left;
+  color: var(--dex-text);
+}
+
+.table thead th {
+  text-align: center;
+  color: var(--dex-text-secondary);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.hint {
+  color: var(--dex-text-secondary);
+  font-size: 13px;
+}
+
+.error {
+  color: var(--dex-down);
+}
+
+.ok {
+  color: var(--dex-up);
+}
+
+.msg {
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--dex-bg-elevated);
+  border: 1px solid var(--dex-border);
+  border-radius: 6px;
+  color: var(--dex-text);
+}
+
+.mono {
+  margin-top: 10px;
+  font-family: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--dex-text-secondary);
+}
+
+.home {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.home-hero h1 {
+  font-size: 40px;
+  margin-bottom: 8px;
+  color: var(--dex-text);
+}
+
+.home-hero .subtitle {
+  color: var(--dex-text-secondary);
+  margin-bottom: 16px;
+}
+
+.home-hero .primary,
+.home-hero .secondary {
+  display: inline-block;
+  margin-right: 8px;
+  margin-top: 4px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.home-hero .primary {
+  background: var(--dex-accent);
+  color: #0b0e11;
+  font-weight: 700;
+}
+
+.home-hero .secondary {
+  background: transparent;
+  border: 1px solid var(--dex-border-soft);
+  color: var(--dex-text);
+}
+
+.home-hero .secondary:hover {
+  border-color: var(--dex-accent);
+  color: var(--dex-accent);
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.tabs button {
+  width: auto;
+}
+
+.tabs button.active {
+  background: var(--dex-accent);
+  color: #0b0e11;
+}
+
+.btn {
+  width: auto;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--dex-border-soft);
+  background: var(--dex-bg-elevated);
+  color: var(--dex-text);
+  cursor: pointer;
+  font-size: 13px;
+  margin-top: 0;
+}
+
+.btn.primary {
+  background: var(--dex-accent);
+  border-color: var(--dex-accent);
+  color: #0b0e11;
+  font-weight: 700;
+}
+
+.btn.link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--dex-accent);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint a,
+p.hint a,
+.auth-card a {
+  color: var(--dex-accent);
+}

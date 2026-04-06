@@ -1,0 +1,29 @@
+Name: walletapi
+Log:
+  Stat: false
+Host: 0.0.0.0
+Port: 9005
+Etcd:
+  Hosts:
+    - 127.0.0.1:2379
+  Key: walletapi-api
+Rpc:
+  Name: walletapi.rpc
+  ListenOn: 0.0.0.0:9101
+  # 与 REST 同进程时 zrpc 先执行 logx.SetUp，须在此关闭 Stat，否则会吃掉 RestConf 的 Log.Stat
+  Log:
+    Stat: false
+  Etcd:
+    Hosts:
+      - 127.0.0.1:2379
+    Key: walletapi.rpc
+Mysql:
+  DataSource: root:123456@tcp(127.0.0.1:33060)/bld-dex?charset=utf8mb4&parseTime=true&loc=Local
+
+# 私钥加密密钥
+CustodyMasterKey: "UJ4TxbINUy6Pgi57xiwYJgPgV902/3uC7Wr385Lr6zE="
+
+# RPC 端点配置
+EvmRPC: "http://127.0.0.1:8545"
+HotWalletPrivateKey: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+HotWalletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"

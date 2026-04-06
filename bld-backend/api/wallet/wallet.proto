@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package walletpb;
+
+// 公共契约：wallet 服务 gRPC，供 ordersapi、gateway 等引用同一生成代码。
+option go_package = "bld-backend/api/wallet;walletpb";
+
+// Wallet：查询资产 + 供订单等服务 RPC 冻结/解冻余额。
+service Wallet {
+  rpc GetAssets(GetAssetsRequest) returns (GetAssetsResponse);
+  // FreezeForOrder 将可用余额划入冻结，并写入 asset_freezes（同一 order_id+asset_id+trading_type 仅允许一条冻结中记录）。
+  rpc FreezeForOrder(FreezeForOrderRequest) returns (FreezeForOrderResponse);
+  // UnfreezeForOrder 按订单+资产+交易类型解冻，将对应冻结金额退回可用。
+  rpc UnfreezeForOrder(UnfreezeForOrderRequest) returns (UnfreezeForOrderResponse);
+  // ApplySpotTrade 现货成交同步结算：扣减双方冻结、增加可用、手续费、写 spot_fund_flows；trade_id 幂等。
+  rpc ApplySpotTrade(ApplySpotTradeRequest) returns (ApplySpotTradeResponse);
+}
+
+message GetAssetsRequest {
+  uint64 user_id = 1;
+  // 0 表示该用户下全部资产；>0 时仅返回该 asset_id。
+  int32 asset_id = 2;
+}
+
+// AssetItem 资产项
+message AssetItem {
+  string symbol = 1;
+  int32 asset_id = 2;
+  string available_balance = 3;
+  string frozen_balance = 4;
+}
+
+// GetAssetsResponse 获取资产响应
+message GetAssetsResponse {
+  uint64 user_id = 1;
+  repeated AssetItem items = 2;
+}
+
+// FreezeForOrderRequest 冻结资产请求
+message FreezeForOrderRequest {
+  uint64 user_id = 1;
+  int32 asset_id = 2;
+  uint64 order_id = 3;
+  string amount = 4; // 正数十进制字符串
+  // 与库表一致：SPOT / CONTRACT
+  string trading_type = 5;
+}
+
+// FreezeForOrderResponse 冻结资产响应
+message FreezeForOrderResponse {
+  uint64 freeze_id = 1;
+}
+
+// UnfreezeForOrderRequest 解冻资产请求
+message UnfreezeForOrderRequest {
+  uint64 user_id = 1;
+  int32 asset_id = 2;
+  uint64 order_id = 3;
+  string trading_type = 4;
+}
+
+// UnfreezeForOrderResponse 解冻资产响应 
+message UnfreezeForOrderResponse {}
+
+// ApplySpotTradeRequest 单笔现货成交结算（与 spot_trades 一行对应）。
+message ApplySpotTradeRequest {
+  uint64 trade_id = 1;
+  int32 market_id = 2;
+  int32 base_asset_id = 3;
+  int32 quote_asset_id = 4;
+  uint64 maker_order_id = 5;
+  uint64 taker_order_id = 6;
+  uint64 maker_user_id = 7;
+  uint64 taker_user_id = 8;
+  // 吃单方方向：BUY 或 SELL（与 spot_orders.side 一致）
+  string taker_side = 9;
+  string price = 10;
+  string quantity = 11;
+  string maker_fee = 12; // 报价币
+  string taker_fee = 13; // 报价币
+}
+
+message ApplySpotTradeResponse {}

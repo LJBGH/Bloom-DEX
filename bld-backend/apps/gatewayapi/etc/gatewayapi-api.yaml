@@ -1,0 +1,11 @@
+Name: gatewayapi-api
+Log:
+  Stat: false
+Host: 0.0.0.0
+Port: 9003
+Etcd:
+  Hosts:
+    - 127.0.0.1:2379
+  Key: gatewayapi-api
+UserRestUrl: "http://127.0.0.1:9006"
+WalletCoreRestUrl: "http://127.0.0.1:9008"
