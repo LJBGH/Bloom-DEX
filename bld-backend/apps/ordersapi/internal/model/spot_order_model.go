@@ -22,6 +22,8 @@ type UserSpotOrderRow struct {
 	AmountInputMode   string
 	Price             sql.NullString
 	Quantity          string
+	MaxQuoteAmount    sql.NullString
+	FilledQuoteAmount string
 	FilledQuantity    string
 	RemainingQuantity string
 	AvgFillPrice      sql.NullString
@@ -33,7 +35,9 @@ type UserSpotOrderRow struct {
 
 type SpotOrderModel interface {
 	MarketExists(ctx context.Context, marketID int) (bool, error)
-	Create(ctx context.Context, orderID uint64, userID uint64, marketID int, side, orderType, amountInputMode string, price *string, quantity string, clientOrderID *string) (uint64, error)
+	Create(ctx context.Context, orderID uint64, userID uint64, marketID int, side, orderType, amountInputMode string, price *string, quantity string, maxQuoteAmount *string, clientOrderID *string) (uint64, error)
+	// GetByIDAndUser 按订单号与用户加载一行；不存在时 err 为 sql.ErrNoRows。
+	GetByIDAndUser(ctx context.Context, orderID uint64, userID uint64) (*UserSpotOrderRow, error)
 	// ListOpenByUser 当前委托：PENDING / PARTIALLY_FILLED。marketID=0 表示全部交易对。
 	ListOpenByUser(ctx context.Context, userID uint64, marketID int, limit int) ([]UserSpotOrderRow, error)
 	// ListHistoryByUser 历史委托：FILLED / CANCELED / REJECTED。
@@ -70,6 +74,7 @@ func (m *defaultSpotOrderModel) Create(
 	side, orderType, amountInputMode string,
 	price *string,
 	quantity string,
+	maxQuoteAmount *string,
 	clientOrderID *string,
 ) (uint64, error) {
 	var priceAny any = nil
@@ -81,10 +86,14 @@ func (m *defaultSpotOrderModel) Create(
 	if clientOrderID != nil {
 		clientOrderAny = *clientOrderID
 	}
+	var maxQuoteAny any = nil
+	if maxQuoteAmount != nil {
+		maxQuoteAny = *maxQuoteAmount
+	}
 
 	res, err := m.conn.ExecCtx(
 		ctx,
-		"INSERT INTO spot_orders(id,user_id,market_id,side,order_type,amount_input_mode,price,quantity,filled_quantity,remaining_quantity,avg_fill_price,status,client_order_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+		"INSERT INTO spot_orders(id,user_id,market_id,side,order_type,amount_input_mode,price,quantity,max_quote_amount,filled_quote_amount,filled_quantity,remaining_quantity,avg_fill_price,status,client_order_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
 		orderID,
 		userID,
 		marketID,
@@ -93,6 +102,8 @@ func (m *defaultSpotOrderModel) Create(
 		amountInputMode,
 		priceAny,
 		quantity,
+		maxQuoteAny,
+		"0",
 		"0",
 		quantity,
 		nil, // avg_fill_price
@@ -105,6 +116,36 @@ func (m *defaultSpotOrderModel) Create(
 
 	_ = res
 	return orderID, nil
+}
+
+func (m *defaultSpotOrderModel) GetByIDAndUser(ctx context.Context, orderID uint64, userID uint64) (*UserSpotOrderRow, error) {
+	db, err := m.conn.RawDB()
+	if err != nil {
+		return nil, err
+	}
+	q := `SELECT o.id, o.market_id, sm.symbol, ab.symbol, aq.symbol,
+		o.side, o.order_type, o.amount_input_mode, o.price, o.quantity, o.max_quote_amount,
+		o.filled_quote_amount, o.filled_quantity, o.remaining_quantity, o.avg_fill_price, o.status,
+		o.client_order_id, o.created_at, o.updated_at
+	FROM spot_orders o
+	JOIN spot_markets sm ON sm.id = o.market_id
+	JOIN assets ab ON ab.id = sm.base_asset_id
+	JOIN assets aq ON aq.id = sm.quote_asset_id
+	WHERE o.id = ? AND o.user_id = ?
+	LIMIT 1`
+	rows, err := db.QueryContext(ctx, q, orderID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list, err := scanUserSpotOrderRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return &list[0], nil
 }
 
 func (m *defaultSpotOrderModel) listByUser(
@@ -125,8 +166,8 @@ func (m *defaultSpotOrderModel) listByUser(
 		return nil, err
 	}
 	q := `SELECT o.id, o.market_id, sm.symbol, ab.symbol, aq.symbol,
-		o.side, o.order_type, o.amount_input_mode, o.price, o.quantity,
-		o.filled_quantity, o.remaining_quantity, o.avg_fill_price, o.status,
+		o.side, o.order_type, o.amount_input_mode, o.price, o.quantity, o.max_quote_amount,
+		o.filled_quote_amount, o.filled_quantity, o.remaining_quantity, o.avg_fill_price, o.status,
 		o.client_order_id, o.created_at, o.updated_at
 	FROM spot_orders o
 	JOIN spot_markets sm ON sm.id = o.market_id
@@ -160,6 +201,8 @@ func scanUserSpotOrderRows(rows *sql.Rows) ([]UserSpotOrderRow, error) {
 			&r.AmountInputMode,
 			&r.Price,
 			&r.Quantity,
+			&r.MaxQuoteAmount,
+			&r.FilledQuoteAmount,
 			&r.FilledQuantity,
 			&r.RemainingQuantity,
 			&r.AvgFillPrice,

@@ -25,6 +25,11 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 				Handler: CreateSpotOrderHandler(serverCtx),
 			},
 			{
+				Method:  http.MethodPost,
+				Path:    "/v1/spot/orders/cancel",
+				Handler: CancelSpotOrderHandler(serverCtx),
+			},
+			{
 				Method:  http.MethodGet,
 				Path:    "/v1/spot/orders",
 				Handler: ListSpotOrdersHandler(serverCtx),

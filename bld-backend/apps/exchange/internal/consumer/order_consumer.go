@@ -32,7 +32,9 @@ func (h *OrderHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sara
 			if !ok {
 				return nil
 			}
+			// 反序列化 Kafka 消息。
 			var m model.SpotOrderKafkaMsg
+			// 反序列化 Kafka 消息。
 			if err := json.Unmarshal(msg.Value, &m); err != nil {
 				logx.Errorf("exchange kafka unmarshal: %v", err)
 				sess.MarkMessage(msg, "")
@@ -50,7 +52,7 @@ func (h *OrderHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sara
 	}
 }
 
-// StartConsumerGroup 阻塞直至 ctx 取消。
+// 启动 Kafka 订单消费者组。
 func StartConsumerGroup(ctx context.Context, brokers []string, groupID, topic string, eng *matcher.Engine) error {
 	if len(brokers) == 0 {
 		return fmt.Errorf("kafka brokers empty")

@@ -15,6 +15,8 @@ type SpotOrder struct {
 	AmountInputMode   string         `db:"amount_input_mode"`
 	Price             sql.NullString `db:"price"`
 	Quantity          string         `db:"quantity"`
+	MaxQuoteAmount    sql.NullString `db:"max_quote_amount"`
+	FilledQuoteAmount string         `db:"filled_quote_amount"`
 	FilledQuantity    string         `db:"filled_quantity"`
 	RemainingQuantity string         `db:"remaining_quantity"`
 	AvgFillPrice      sql.NullString `db:"avg_fill_price"`

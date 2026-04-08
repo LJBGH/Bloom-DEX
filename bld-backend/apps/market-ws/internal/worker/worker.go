@@ -11,11 +11,13 @@ import (
 	"bld-backend/apps/market-ws/internal/config"
 	"bld-backend/apps/market-ws/internal/consumer"
 	"bld-backend/apps/market-ws/internal/hub"
+	"bld-backend/apps/market-ws/internal/kline"
 	wsh "bld-backend/apps/market-ws/internal/ws"
 	"bld-backend/core/enum"
 	"bld-backend/core/model"
 
 	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
 type Worker struct {
@@ -34,6 +36,16 @@ func New(cfg config.Config) *Worker {
 func (w *Worker) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancel = cancel
+
+	conn := sqlx.NewMysql(w.cfg.Mysql.DataSource)
+	klineStore := kline.NewStore(conn)
+	// 若未预聚合过，则用 spot_trades 做一次最小启动补全，避免仅依赖 Kafka offset。
+	if cnt, err := klineStore.Count(ctx); err == nil && cnt == 0 {
+		logx.Infof("spot_klines empty (cnt=0), bootstrapping from spot_trades")
+		if err := klineStore.BootstrapFromSpotTrades(ctx, 5000); err != nil {
+			logx.Errorf("spot_klines bootstrap failed: %v", err)
+		}
+	}
 
 	// 获取深度主题
 	depthTopic := w.cfg.Kafka.DepthTopic
@@ -68,7 +80,7 @@ func (w *Worker) Start() {
 		go func() {
 			defer w.wg.Done()
 			logx.Infof("market-ws consuming topic=%q group=%q", tradeTopic, tradeGroupID)
-			if err := consumer.StartTradeConsumer(ctx, w.cfg.Kafka.Brokers, tradeGroupID, tradeTopic, w.hub); err != nil && ctx.Err() == nil {
+			if err := consumer.StartTradeConsumer(ctx, w.cfg.Kafka.Brokers, tradeGroupID, tradeTopic, w.hub, klineStore); err != nil && ctx.Err() == nil {
 				logx.Errorf("market-ws trade kafka consumer stopped: %v", err)
 			}
 		}()
@@ -111,6 +123,44 @@ func (w *Worker) Start() {
 			}
 			rw.Header().Set("Content-Type", "application/json")
 			_, _ = rw.Write(raw)
+			return
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		_, _ = rw.Write(raw)
+	})
+
+	// 处理 K线历史请求
+	mux.HandleFunc("/api/v1/klines", func(rw http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		q := r.URL.Query()
+		mid, err := strconv.Atoi(q.Get("market_id"))
+		if err != nil || mid <= 0 {
+			http.Error(rw, "invalid market_id", http.StatusBadRequest)
+			return
+		}
+		interval := q.Get("interval")
+		if interval == "" {
+			interval = "1m"
+		}
+		fromMs, _ := strconv.ParseInt(q.Get("from_ms"), 10, 64)
+		toMs, _ := strconv.ParseInt(q.Get("to_ms"), 10, 64)
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		rows, err := klineStore.List(r.Context(), mid, interval, fromMs, toMs, limit)
+		if err != nil {
+			logx.Errorf("market-ws klines list error: %v", err)
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		raw, err := json.Marshal(struct {
+			Items []kline.Row `json:"items"`
+		}{Items: rows})
+		if err != nil {
+			logx.Errorf("market-ws klines json marshal error: %v", err)
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		rw.Header().Set("Content-Type", "application/json")

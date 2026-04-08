@@ -6,16 +6,17 @@ import (
 	"github.com/IBM/sarama"
 )
 
-// DepthPublisher 推送订单簿快照到 Kafka。
+// 推送订单簿快照到 Kafka。
 type DepthPublisher interface {
 	Publish(ctx context.Context, topic string, partition int32, key string, value []byte) error
 }
 
+// 是深度快照同步生产者的实现。
 type saramaDepthProducer struct {
 	producer sarama.SyncProducer
 }
 
-// NewDepthProducer 创建深度快照同步生产者。
+// 创建深度快照同步生产者。
 func NewDepthProducer(brokers []string) (DepthPublisher, error) {
 	cfg := sarama.NewConfig()
 	cfg.Producer.RequiredAcks = sarama.WaitForLocal

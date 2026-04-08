@@ -21,7 +21,18 @@ type CreateSpotOrderReq struct {
 }
 
 type CreateSpotOrderResp struct {
-	OrderId uint64 `json:"order_id"`
+	OrderId string `json:"order_id"`
+	Status  string `json:"status"`
+}
+
+// CancelSpotOrderReq POST /v1/spot/orders/cancel
+type CancelSpotOrderReq struct {
+	UserId  uint64 `json:"user_id"`
+	OrderId string `json:"order_id"`
+}
+
+type CancelSpotOrderResp struct {
+	OrderId string `json:"order_id"`
 	Status  string `json:"status"`
 }
 
@@ -34,7 +45,7 @@ type ListSpotOrdersReq struct {
 }
 
 type SpotOrderListItem struct {
-	OrderId           uint64  `json:"order_id"`
+	OrderId           string  `json:"order_id"`
 	MarketId          int     `json:"market_id"`
 	Symbol            string  `json:"symbol"`
 	BaseSymbol        string  `json:"base_symbol"`
@@ -42,8 +53,13 @@ type SpotOrderListItem struct {
 	Side              string  `json:"side"`
 	OrderType         string  `json:"order_type"`
 	AmountInputMode   string  `json:"amount_input_mode"`
+	TradeInputMode    string  `json:"trade_input_mode"`
 	Price             *string `json:"price,omitempty"`
 	Quantity          string  `json:"quantity"`
+	MaxQuoteAmount    *string `json:"max_quote_amount,omitempty"`
+	FilledQuoteAmount string  `json:"filled_quote_amount"`
+	MaxTurnover       *string `json:"max_turnover,omitempty"`
+	FilledTurnover    string  `json:"filled_turnover"`
 	FilledQuantity    string  `json:"filled_quantity"`
 	RemainingQuantity string  `json:"remaining_quantity"`
 	AvgFillPrice      *string `json:"avg_fill_price,omitempty"`
@@ -65,7 +81,7 @@ type ListSpotTradesReq struct {
 }
 
 type SpotTradeListItem struct {
-	TradeId    uint64 `json:"trade_id"`
+	TradeId    string `json:"trade_id"`
 	MarketId   int    `json:"market_id"`
 	Symbol     string `json:"symbol"`
 	Side       string `json:"side"`

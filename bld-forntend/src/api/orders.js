@@ -15,6 +15,11 @@ export function createSpotOrderApi(payload) {
   return ordersHttp.post('/v1/spot/orders', payload)
 }
 
+/** @param {{ user_id: number, order_id: string }} payload */
+export function cancelSpotOrderApi(payload) {
+  return ordersHttp.post('/v1/spot/orders/cancel', payload)
+}
+
 /** @param {{ user_id: number, scope: 'open'|'history', market_id?: number, limit?: number }} params */
 export function listSpotOrdersApi(params) {
   const p = {

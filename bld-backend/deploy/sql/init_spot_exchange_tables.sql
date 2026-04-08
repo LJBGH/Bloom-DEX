@@ -51,6 +51,8 @@ CREATE TABLE `spot_orders` (
   `amount_input_mode` VARCHAR(16) NOT NULL DEFAULT 'QUANTITY' COMMENT '用户下单维度：QUANTITY=按数量 TURNOVER=按成交额(报价币)；限价单固定QUANTITY',
   `price` DECIMAL(36,18) NULL COMMENT '限价（LIMIT订单）；MARKET可为空（直到成交）',
   `quantity` DECIMAL(36,18) NOT NULL COMMENT '下单数量（以 base 为单位）',
+  `max_quote_amount` DECIMAL(36,18) NULL COMMENT '市价买按成交额模式下的报价币预算（TURNOVER）',
+  `filled_quote_amount` DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '已成交金额（以 quote 为单位）',
   `filled_quantity` DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '已成交数量（以 base 为单位）',
   `remaining_quantity` DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '剩余未成交数量（以 base 为单位）',
   `avg_fill_price` DECIMAL(36,18) NULL COMMENT '平均成交价（全部成交后可落库）',
@@ -78,6 +80,26 @@ CREATE TABLE `spot_trades` (
   `tx_hash` VARCHAR(66) NULL COMMENT '若后续链上结算，可记录交易哈希',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -----------------------------
+-- spot_klines（预聚合K线）
+-- -----------------------------
+CREATE TABLE `spot_klines` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'K线主键ID',
+  `market_id` INT NOT NULL COMMENT '交易对ID',
+  `interval` VARCHAR(8) NOT NULL COMMENT '1m/5m/15m/1h/4h/1d...',
+  `open_time_ms` BIGINT NOT NULL COMMENT 'K线开盘时间戳（ms，按 interval 对齐）',
+  `open` DECIMAL(36,18) NOT NULL COMMENT '开盘价',
+  `high` DECIMAL(36,18) NOT NULL COMMENT '最高价',
+  `low` DECIMAL(36,18) NOT NULL COMMENT '最低价',
+  `close` DECIMAL(36,18) NOT NULL COMMENT '收盘价',
+  `volume` DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '成交量（基准币）',
+  `turnover` DECIMAL(36,18) NOT NULL DEFAULT 0 COMMENT '成交额（报价币）',
+  `trades_count` INT NOT NULL DEFAULT 0 COMMENT '成交笔数',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------

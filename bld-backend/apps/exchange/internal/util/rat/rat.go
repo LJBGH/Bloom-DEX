@@ -22,7 +22,7 @@ func Parse(s string) (*big.Rat, error) {
 	return r, nil
 }
 
-// MustPositive 要求 > 0。
+// 要求大于 0。
 func MustPositive(s string) (*big.Rat, error) {
 	r, err := Parse(s)
 	if err != nil {

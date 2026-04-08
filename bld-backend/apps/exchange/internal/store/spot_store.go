@@ -23,6 +23,7 @@ type SpotOrderRow struct {
 	OrderType         string         `db:"order_type"`
 	Price             sql.NullString `db:"price"`
 	Quantity          string         `db:"quantity"`
+	FilledQuoteAmount string         `db:"filled_quote_amount"`
 	FilledQuantity    string         `db:"filled_quantity"`
 	RemainingQuantity string         `db:"remaining_quantity"`
 	AvgFillPrice      sql.NullString `db:"avg_fill_price"`
@@ -58,6 +59,7 @@ type TradeRow struct {
 // OrderFillUpdate 成交后对单笔订单的累计更新（引擎在内存中算好最终列值）。
 type OrderFillUpdate struct {
 	OrderID           uint64
+	FilledQuoteDelta  string
 	FilledQuantity    string
 	RemainingQuantity string
 	Status            string
@@ -76,7 +78,7 @@ func NewSpotStore(conn sqlx.SqlConn) *SpotStore {
 func (s *SpotStore) GetOrder(ctx context.Context, orderID uint64) (*SpotOrderRow, error) {
 	var r SpotOrderRow
 	err := s.conn.QueryRowCtx(ctx, &r, `
-SELECT id, user_id, market_id, created_at, side, order_type, price, quantity, filled_quantity, remaining_quantity, avg_fill_price, status
+SELECT id, user_id, market_id, created_at, side, order_type, price, quantity, filled_quote_amount, filled_quantity, remaining_quantity, avg_fill_price, status
 FROM spot_orders WHERE id = ?`, orderID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -101,6 +103,30 @@ SELECT id, base_asset_id, quote_asset_id, maker_fee_rate, taker_fee_rate FROM sp
 	return &m, nil
 }
 
+// CancelLimitOrder 将未完结限价单置为已撤销并清零剩余量；仅当仍为 PENDING/PARTIALLY_FILLED 时返回 true。
+func (s *SpotStore) CancelLimitOrder(ctx context.Context, orderID uint64) (bool, error) {
+	res, err := s.conn.ExecCtx(ctx, `
+UPDATE spot_orders
+SET status = ?, remaining_quantity = 0, cancelled_at = NOW(), updated_at = NOW()
+WHERE id = ?
+  AND order_type = ?
+  AND status IN (?, ?)`,
+		enum.SOS_Canceled.String(),
+		orderID,
+		enum.Limit.String(),
+		enum.SOS_Pending.String(),
+		enum.SOS_PartiallyFilled.String(),
+	)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // ListActiveMarketIDs 用于恢复订单簿。
 func (s *SpotStore) ListActiveMarketIDs(ctx context.Context) ([]int, error) {
 	var rows []marketIDRow
@@ -115,17 +141,49 @@ func (s *SpotStore) ListActiveMarketIDs(ctx context.Context) ([]int, error) {
 	return out, nil
 }
 
+// ListActiveMarkets 返回活跃市场及手续费信息（用于恢复阶段批量加载）。
+func (s *SpotStore) ListActiveMarkets(ctx context.Context) ([]MarketFees, error) {
+	var rows []MarketFees
+	err := s.conn.QueryRowsCtx(ctx, &rows, `
+SELECT id, base_asset_id, quote_asset_id, maker_fee_rate, taker_fee_rate
+FROM spot_markets
+WHERE status = ?
+ORDER BY id ASC`, enum.SMS_Active.String())
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 // ListOpenLimitOrders 某市场未完结限价单，按 id 时间序。
 func (s *SpotStore) ListOpenLimitOrders(ctx context.Context, marketID int) ([]SpotOrderRow, error) {
 	var rows []SpotOrderRow
 	err := s.conn.QueryRowsCtx(ctx, &rows, `
-SELECT id, user_id, market_id, created_at, side, order_type, price, quantity, filled_quantity, remaining_quantity, avg_fill_price, status
+SELECT id, user_id, market_id, created_at, side, order_type, price, quantity, filled_quote_amount, filled_quantity, remaining_quantity, avg_fill_price, status
 FROM spot_orders
 WHERE market_id = ?
   AND order_type = ?
   AND status IN (?, ?)
   AND remaining_quantity > 0
 ORDER BY id ASC`, marketID, enum.Limit.String(), enum.SOS_Pending.String(), enum.SOS_PartiallyFilled.String())
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// 返回所有活跃市场的未完结限价单，按 market_id、id 升序。
+func (s *SpotStore) ListOpenLimitOrdersForActiveMarkets(ctx context.Context) ([]SpotOrderRow, error) {
+	var rows []SpotOrderRow
+	err := s.conn.QueryRowsCtx(ctx, &rows, `
+SELECT o.id, o.user_id, o.market_id, o.created_at, o.side, o.order_type, o.price, o.quantity, o.filled_quote_amount, o.filled_quantity, o.remaining_quantity, o.avg_fill_price, o.status
+FROM spot_orders o
+INNER JOIN spot_markets m ON m.id = o.market_id
+WHERE m.status = ?
+  AND o.order_type = ?
+  AND o.status IN (?, ?)
+  AND o.remaining_quantity > 0
+ORDER BY o.market_id ASC, o.id ASC`, enum.SMS_Active.String(), enum.Limit.String(), enum.SOS_Pending.String(), enum.SOS_PartiallyFilled.String())
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +219,8 @@ func (s *SpotStore) RunMatchTx(ctx context.Context, trades []TradeRow, orders []
 				avg = nil
 			}
 			_, err := session.ExecCtx(ctx, `
-UPDATE spot_orders SET filled_quantity = ?, remaining_quantity = ?, status = ?, avg_fill_price = ?, updated_at = NOW()
-WHERE id = ?`, o.FilledQuantity, o.RemainingQuantity, o.Status, avg, o.OrderID)
+UPDATE spot_orders SET filled_quote_amount = filled_quote_amount + ?, filled_quantity = ?, remaining_quantity = ?, status = ?, avg_fill_price = ?, updated_at = NOW()
+WHERE id = ?`, o.FilledQuoteDelta, o.FilledQuantity, o.RemainingQuantity, o.Status, avg, o.OrderID)
 			if err != nil {
 				return fmt.Errorf("update spot_orders %d: %w", o.OrderID, err)
 			}

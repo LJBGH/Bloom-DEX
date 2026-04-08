@@ -1,11 +1,17 @@
 <script setup>
 import { CandlestickSeries, HistogramSeries, createChart } from 'lightweight-charts'
+import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   marketId: { type: Number, required: true },
   /** 如 ETH/USDT，展示在 OHLC 条 */
   pairLabel: { type: String, default: '—' },
+})
+
+const marketKlineHttp = axios.create({
+  baseURL: '/marketws',
+  timeout: 8000,
 })
 
 const TIMEFRAMES = [
@@ -51,6 +57,7 @@ let ro = null
 let crosshairHandler = null
 /** 十字光标移出时恢复展示 */
 let lastCandleBar = null
+let candles1mCache = []
 
 /** 当前周期秒数 */
 const stepSec = computed(() => {
@@ -95,43 +102,94 @@ function buildOhlcLine(c, tfLabel) {
   return `${pair} 现货 · ${tfLabel}   O ${fmtPx(o)}   H ${fmtPx(h)}   L ${fmtPx(l)}   C ${fmtPx(cl)}   ${sign}${chg.toFixed(2)}%`
 }
 
-function genDataset(marketId, step, count) {
-  const rnd = mulberry32(marketId * 1000003 + step + count)
-  const now = Math.floor(Date.now() / 1000)
-  const start = now - step * count
-  let price = 2000 + (marketId % 400) * 0.5 + (step % 997)
-
-  const candles = []
-  const volumes = []
-  for (let i = 0; i < count; i++) {
-    const t = start + i * step
-    const open = price
-    const delta = (rnd() - 0.5) * (open * 0.0018)
-    const close = Math.max(0.0001, open + delta)
-    const high = Math.max(open, close) * (1 + rnd() * 0.0008)
-    const low = Math.min(open, close) * (1 - rnd() * 0.0008)
-    const vol = rnd() * 8000 + 1200
-    const up = close >= open
-    candles.push({ time: t, open, high, low, close })
-    volumes.push({
-      time: t,
-      value: vol,
-      color: up ? 'rgba(14, 203, 129, 0.55)' : 'rgba(246, 70, 93, 0.55)',
-    })
-    price = close
+function resample1mTo(step, count) {
+  // buckets: { timeSec, open, high, low, close, volume }
+  const buckets = new Map()
+  for (const c of candles1mCache) {
+    const timeSec = Math.floor(Number(c.open_time_ms) / 1000)
+    const bucketTime = Math.floor(timeSec / step) * step
+    if (!Number.isFinite(bucketTime)) continue
+    let b = buckets.get(bucketTime)
+    if (!b) {
+      b = { time: bucketTime, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close), volume: 0 }
+      buckets.set(bucketTime, b)
+    }
+    const open = Number(c.open)
+    const high = Number(c.high)
+    const low = Number(c.low)
+    const close = Number(c.close)
+    const vol = Number(c.volume)
+    if (!Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close) || !Number.isFinite(vol)) continue
+    b.high = Math.max(b.high, high)
+    b.low = Math.min(b.low, low)
+    b.close = close
+    b.volume += vol
   }
-  return { candles, volumes }
+
+  const ordered = Array.from(buckets.values()).sort((a, b) => a.time - b.time)
+  const sliced = ordered.slice(Math.max(0, ordered.length - count))
+  const candles = sliced.map((b) => ({
+    time: b.time,
+    open: b.open,
+    high: b.high,
+    low: b.low,
+    close: b.close,
+  }))
+  const volumes = sliced.map((b) => {
+    const up = b.close >= b.open
+    return {
+      time: b.time,
+      value: b.volume,
+      color: up ? 'rgba(14, 203, 129, 0.55)' : 'rgba(246, 70, 93, 0.55)',
+    }
+  })
+
+  return { candles, volumes, last: candles[candles.length - 1] || null }
+}
+
+let loadSeq = 0
+async function loadAndApply() {
+  if (!candleSeries || !volumeSeries) return
+  const seq = ++loadSeq
+
+  const step = stepSec.value
+  const count = barCount.value
+  const toMs = Date.now()
+  const fromMs = toMs - step * count * 1000 - 60 * 1000 * 5
+  const limit1m = Math.min(4000, Math.ceil((step * count) / 60) + 50)
+
+  const resp = await marketKlineHttp.get('/api/v1/klines', {
+    params: {
+      market_id: props.marketId,
+      interval: '1m',
+      from_ms: fromMs,
+      to_ms: toMs,
+      limit: limit1m,
+    },
+  })
+
+  if (seq !== loadSeq) return
+  const items = resp?.data?.items || []
+  candles1mCache = items
+
+  const { candles, volumes, last } = resample1mTo(step, count)
+  candleSeries.setData(candles)
+  volumeSeries.setData(volumes)
+  lastCandleBar = last
+  ohlcText.value = last ? buildOhlcLine(last, activeTf.value) : ''
+  chart?.timeScale().fitContent()
 }
 
 function applyData() {
-  if (!candleSeries || !volumeSeries) return
-  const { candles, volumes } = genDataset(props.marketId, stepSec.value, barCount.value)
-  candleSeries.setData(candles)
-  volumeSeries.setData(volumes)
-  const last = candles[candles.length - 1]
-  lastCandleBar = last || null
-  ohlcText.value = buildOhlcLine(last, activeTf.value)
-  chart?.timeScale().fitContent()
+  loadAndApply().catch((e) => {
+    // 接口异常时不再用模拟数据，保留空图便于定位问题
+    // eslint-disable-next-line no-console
+    console.error('load klines failed', e)
+    candleSeries?.setData([])
+    volumeSeries?.setData([])
+    lastCandleBar = null
+    ohlcText.value = ''
+  })
 }
 
 function initChart() {

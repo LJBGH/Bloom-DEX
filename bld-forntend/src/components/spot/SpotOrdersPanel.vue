@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { listSpotOrdersApi, listSpotTradesApi } from '../../api/orders.js'
+import { cancelSpotOrderApi, listSpotOrdersApi, listSpotTradesApi } from '../../api/orders.js'
 
 const props = defineProps({
   userId: { type: Number, default: 0 },
@@ -16,6 +16,9 @@ const errMsg = ref('')
 const openItems = ref([])
 const historyItems = ref([])
 const tradeItems = ref([])
+const cancelingId = ref('')
+const cancelConfirmOpen = ref(false)
+const cancelConfirmOrderId = ref('')
 
 const effectiveMarketId = computed(() => {
   if (!hideOtherPairs.value || props.marketId == null) return 0
@@ -130,6 +133,45 @@ function orderTypeLabel(t) {
   return t || '—'
 }
 
+function tradeInputModeLabel(v) {
+  if (v === 'TURNOVER') return '成交额'
+  if (v === 'QUANTITY') return '数量'
+  return v || '—'
+}
+
+function isMarketOrder(r) {
+  return r?.order_type === 'MARKET'
+}
+
+function isTurnoverMode(r) {
+  const mode = r?.trade_input_mode || r?.amount_input_mode
+  return mode === 'TURNOVER'
+}
+
+function displayFilledQty(r) {
+  return r?.filled_quantity ?? '0'
+}
+
+function displayOrderQty(r) {
+  if (isMarketOrder(r) && isTurnoverMode(r)) return '—'
+  return r?.quantity ?? '—'
+}
+
+function displayRemainingQty(r) {
+  if (isMarketOrder(r) && isTurnoverMode(r)) return '—'
+  return r?.remaining_quantity ?? '0'
+}
+
+function displayFilledTurnover(r) {
+  if (isMarketOrder(r) && !isTurnoverMode(r)) return '—'
+  return r?.filled_turnover ?? r?.filled_quote_amount ?? '0'
+}
+
+function displayMaxTurnover(r) {
+  if (isMarketOrder(r) && !isTurnoverMode(r)) return '—'
+  return r?.max_turnover ?? r?.max_quote_amount ?? '—'
+}
+
 function statusLabel(s) {
   const m = {
     PENDING: '待成交',
@@ -164,6 +206,46 @@ const historyTurnoverSummary = computed(() => {
 
 function tradeQuoteAmount(r) {
   return parseNum(r.price) * parseNum(r.quantity)
+}
+
+function canCancelLimitOrder(r) {
+  if (!r || r.order_type !== 'LIMIT') return false
+  const s = r.status
+  return s === 'PENDING' || s === 'PARTIALLY_FILLED'
+}
+
+async function cancelOpenOrder(r) {
+  if (!canCancelLimitOrder(r) || props.userId <= 0) return
+  const oid = String(r.order_id ?? '').trim()
+  if (!oid) return
+  cancelConfirmOrderId.value = oid
+  cancelConfirmOpen.value = true
+}
+
+async function doCancelById(oid) {
+  cancelingId.value = oid
+  errMsg.value = ''
+  try {
+    await cancelSpotOrderApi({ user_id: props.userId, order_id: oid })
+    await fetchOpen()
+  } catch (e) {
+    errMsg.value = e?.response?.data?.message || e?.message || '撤单失败'
+  } finally {
+    cancelingId.value = ''
+  }
+}
+
+function closeCancelConfirm() {
+  if (cancelingId.value && cancelingId.value === cancelConfirmOrderId.value) return
+  cancelConfirmOpen.value = false
+  cancelConfirmOrderId.value = ''
+}
+
+function confirmCancel() {
+  const oid = String(cancelConfirmOrderId.value || '').trim()
+  if (!oid) return closeCancelConfirm()
+  cancelConfirmOpen.value = false
+  doCancelById(oid)
 }
 </script>
 
@@ -225,10 +307,14 @@ function tradeQuoteAmount(r) {
               <th>类型</th>
               <th>方向</th>
               <th>价格</th>
-              <th>已成交</th>
-              <th>剩余</th>
+              <th>成交维度</th>
+              <th>成交数量</th>
+              <th>剩余数量</th>
+              <th>成交额度</th>
+              <th>最大成交额度</th>
               <th>状态</th>
               <th>订单号</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -240,10 +326,25 @@ function tradeQuoteAmount(r) {
                 {{ r.side === 'BUY' ? '买入' : '卖出' }}
               </td>
               <td class="sop-mono">{{ r.price ?? '市价' }}</td>
-              <td class="sop-mono">{{ r.filled_quantity }}</td>
-              <td class="sop-mono">{{ r.remaining_quantity }}</td>
+              <td>{{ tradeInputModeLabel(r.trade_input_mode || r.amount_input_mode) }}</td>
+              <td class="sop-mono">{{ displayFilledQty(r) }}</td>
+              <td class="sop-mono">{{ displayRemainingQty(r) }}</td>
+              <td class="sop-mono">{{ displayFilledTurnover(r) }}</td>
+              <td class="sop-mono">{{ displayMaxTurnover(r) }}</td>
               <td>{{ statusLabel(r.status) }}</td>
               <td class="sop-mono sop-id">{{ r.order_id }}</td>
+              <td>
+                <button
+                  v-if="canCancelLimitOrder(r)"
+                  type="button"
+                  class="sop-cancel-btn"
+                  :disabled="cancelingId === String(r.order_id)"
+                  @click="cancelOpenOrder(r)"
+                >
+                  {{ cancelingId === String(r.order_id) ? '撤单中…' : '撤单' }}
+                </button>
+                <span v-else class="sop-dash">—</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -263,8 +364,11 @@ function tradeQuoteAmount(r) {
               <th>方向</th>
               <th>均价</th>
               <th>价格</th>
-              <th>已成交</th>
-              <th>委托量</th>
+              <th>成交维度</th>
+              <th>成交数量</th>
+              <th>委托数量</th>
+              <th>成交额度</th>
+              <th>最大成交额度</th>
               <th>状态</th>
               <th>订单号</th>
             </tr>
@@ -279,8 +383,11 @@ function tradeQuoteAmount(r) {
               </td>
               <td class="sop-mono">{{ r.avg_fill_price ?? '—' }}</td>
               <td class="sop-mono">{{ r.price ?? '—' }}</td>
-              <td class="sop-mono">{{ r.filled_quantity }}</td>
-              <td class="sop-mono">{{ r.quantity }}</td>
+              <td>{{ tradeInputModeLabel(r.trade_input_mode || r.amount_input_mode) }}</td>
+              <td class="sop-mono">{{ displayFilledQty(r) }}</td>
+              <td class="sop-mono">{{ displayOrderQty(r) }}</td>
+              <td class="sop-mono">{{ displayFilledTurnover(r) }}</td>
+              <td class="sop-mono">{{ displayMaxTurnover(r) }}</td>
               <td>{{ statusLabel(r.status) }}</td>
               <td class="sop-mono sop-id">{{ r.order_id }}</td>
             </tr>
@@ -334,6 +441,36 @@ function tradeQuoteAmount(r) {
         </div>
       </div>
     </template>
+    <div
+      v-if="cancelConfirmOpen"
+      class="sop-modal-backdrop"
+      @click.self="closeCancelConfirm"
+    >
+      <div class="sop-modal">
+        <div class="sop-modal-title">撤单确认</div>
+        <div class="sop-modal-body">
+          确定要撤销订单 <span class="sop-mono">{{ cancelConfirmOrderId }}</span> 吗？
+        </div>
+        <div class="sop-modal-actions">
+          <button
+            type="button"
+            class="sop-modal-btn sop-modal-cancel"
+            :disabled="cancelingId === cancelConfirmOrderId"
+            @click="closeCancelConfirm"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="sop-modal-btn sop-modal-ok"
+            :disabled="cancelingId === cancelConfirmOrderId"
+            @click="confirmCancel"
+          >
+            {{ cancelingId === cancelConfirmOrderId ? '撤单中…' : '确定' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -522,5 +659,95 @@ function tradeQuoteAmount(r) {
 .sop-link {
   color: #3861fb;
   cursor: default;
+}
+
+.sop-cancel-btn {
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid #474d57;
+  border-radius: 0;
+  background: transparent;
+  color: #eaecef;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sop-cancel-btn:hover:not(:disabled) {
+  border-color: #848e9c;
+  color: #f0b90b;
+}
+
+.sop-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sop-dash {
+  color: #5e6673;
+}
+
+.sop-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.sop-modal {
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  background: #0b0e11;
+  border: 1px solid #2a2e36;
+  padding: 14px 14px 16px;
+}
+
+.sop-modal-title {
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.sop-modal-body {
+  color: #eaecef;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.sop-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.sop-modal-btn {
+  padding: 6px 12px;
+  border: 1px solid #474d57;
+  border-radius: 0;
+  background: transparent;
+  color: #eaecef;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sop-modal-btn:hover:not(:disabled) {
+  border-color: #848e9c;
+  color: #f0b90b;
+}
+
+.sop-modal-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sop-modal-ok {
+  border-color: #f0b90b;
+  color: #f0b90b;
+}
+
+.sop-modal-cancel {
+  border-color: #474d57;
 }
 </style>

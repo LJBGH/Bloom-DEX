@@ -8,12 +8,13 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"time"
 
 	walletpb "bld-backend/api/wallet"
-	"bld-backend/core/enum"
-	"bld-backend/core/model"
 	"bld-backend/apps/ordersapi/internal/svc"
 	"bld-backend/apps/ordersapi/internal/types"
+	"bld-backend/core/enum"
+	"bld-backend/core/model"
 
 	"github.com/zeromicro/go-zero/core/logx"
 	"google.golang.org/grpc/status"
@@ -113,7 +114,7 @@ func (l *CreateSpotOrderLogic) CreateSpotOrder(req *types.CreateSpotOrderReq) (*
 		return nil, err
 	}
 
-	id, err := l.svcCtx.SpotOrderModel.Create(l.ctx, orderID, req.UserId, req.MarketId, side, orderType, amountInputMode, price, quantity, req.ClientOrderId)
+	id, err := l.svcCtx.SpotOrderModel.Create(l.ctx, orderID, req.UserId, req.MarketId, side, orderType, amountInputMode, price, quantity, maxQuote, req.ClientOrderId)
 	if err != nil {
 		_ = l.walletUnfreezeSpotOrder(req.UserId, mkt, side, orderID, walletFreezeQuote, walletFreezeBase)
 		return nil, err
@@ -134,11 +135,20 @@ func (l *CreateSpotOrderLogic) CreateSpotOrder(req *types.CreateSpotOrderReq) (*
 		OrderID:         id,
 		UserID:          req.UserId,
 		MarketID:        req.MarketId,
+		CreatedAtMs:     time.Now().UnixMilli(),
 		Side:            side,
 		OrderType:       orderType,
 		AmountInputMode: amountInputMode,
 		Price:           price,
 		Quantity:        quantity,
+		MaxQuoteAmount:  maxQuote,
+		FilledQuantity:  "0",
+		RemainingQty:    quantity,
+		AvgFillPrice:    nil,
+		BaseAssetID:     mkt.BaseAssetID,
+		QuoteAssetID:    mkt.QuoteAssetID,
+		MakerFeeRate:    mkt.MakerFeeRate,
+		TakerFeeRate:    mkt.TakerFeeRate,
 		ClientOrderID:   req.ClientOrderId,
 		Status:          enum.SOS_Pending.String(),
 	}
@@ -147,7 +157,7 @@ func (l *CreateSpotOrderLogic) CreateSpotOrder(req *types.CreateSpotOrderReq) (*
 	}
 
 	return &types.CreateSpotOrderResp{
-		OrderId: id,
+		OrderId: strconv.FormatUint(id, 10),
 		Status:  enum.SOS_Pending.String(),
 	}, nil
 }
@@ -261,6 +271,15 @@ func normalizeSpotOrderParams(req *types.CreateSpotOrderReq, side, orderType str
 		}
 		if !isPositiveDecimal(q) {
 			return nil, "", nil, errors.New("quantity must be > 0")
+		}
+		// MARKET SELL in TURNOVER mode also preserves max_quote_amount for display/audit.
+		if req.AmountInputMode != nil && strings.EqualFold(strings.TrimSpace(*req.AmountInputMode), enum.Turnover.String()) {
+			if req.MaxQuoteAmount != nil {
+				mq := strings.TrimSpace(*req.MaxQuoteAmount)
+				if mq != "" && isPositiveDecimal(mq) {
+					return nil, q, &mq, nil
+				}
+			}
 		}
 		return nil, q, nil, nil
 	default:

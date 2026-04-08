@@ -4,20 +4,22 @@ import (
 	"bld-backend/core/util/etcdreg"
 
 	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
 type KafkaConf struct {
 	Brokers      []string
-	GroupID      string `json:",default=market-ws-depth"`
-	DepthTopic   string `json:",optional"`
-	TradeTopic   string `json:",optional"`
-	TradeGroupID string `json:",optional"`
+	GroupID      string
+	DepthTopic   string
+	TradeTopic   string
+	TradeGroupID string
 }
 
 type Config struct {
-	Name     string `json:",default=market-ws"`
+	Name     string
 	Log      logx.LogConf
 	Etcd     etcdreg.Config
-	ListenOn string `json:",default=0.0.0.0:9201"`
+	ListenOn string
 	Kafka    KafkaConf
+	Mysql    sqlx.SqlConf
 }

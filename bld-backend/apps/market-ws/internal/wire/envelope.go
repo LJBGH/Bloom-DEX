@@ -17,3 +17,11 @@ func TradeEvent(inner []byte) ([]byte, error) {
 		Data    json.RawMessage `json:"data"`
 	}{Channel: "trade", Data: inner})
 }
+
+// KlineEvent K线外层格式。
+func KlineEvent(inner []byte) ([]byte, error) {
+	return json.Marshal(struct {
+		Channel string          `json:"channel"`
+		Data    json.RawMessage `json:"data"`
+	}{Channel: "kline", Data: inner})
+}

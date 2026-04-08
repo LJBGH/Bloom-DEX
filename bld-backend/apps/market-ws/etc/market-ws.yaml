@@ -13,7 +13,9 @@ ListenOn: 0.0.0.0:9201
 Kafka:
   Brokers:
     - 127.0.0.1:9092
-  GroupID: market-ws-depth
-  DepthTopic: market.depth.delta
-  TradeTopic: market.trade.tick
-  TradeGroupID: market-ws-trade
+  GroupID: market-ws-depth # 与 exchange 的 GroupID 一致
+  DepthTopic: market.depth.delta # 与 exchange 的 DepthTopic 一致
+  TradeTopic: market.trade.tick # 与 exchange 的 TradeTopic 一致
+  TradeGroupID: market-ws-trade-klines-v2 # 为K线聚合重跑offset
+Mysql:
+  DataSource: root:123456@tcp(127.0.0.1:33060)/bld-dex?charset=utf8mb4&parseTime=true&loc=Local

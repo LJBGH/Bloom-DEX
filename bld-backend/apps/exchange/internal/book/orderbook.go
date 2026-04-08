@@ -120,24 +120,27 @@ type Trade struct {
 // - trades：成交列表
 // - rem：剩余买方 base 数量
 func (ob *OrderBook) MatchLimitBuy(limitPrice *big.Rat, takerRem *big.Rat, takerOrderID, takerUserID uint64) ([]Trade, *big.Rat) {
-
 	rem := new(big.Rat).Set(takerRem)
 	var trades []Trade
-	// 遍历卖盘档位。
-	for rem.Sign() > 0 && len(ob.asks) > 0 {
-		lv := ob.asks[0]
+	// 遍历卖盘档位（价低到高），跳过仅同用户档位，继续尝试后续可成交档位。
+	for i := 0; rem.Sign() > 0 && i < len(ob.asks); {
+		lv := ob.asks[i]
 		// askPrice > limitPrice → 卖得太贵，更优卖档已吃完，停止吃单
 		if lv.price.Cmp(limitPrice) > 0 {
 			break
 		}
-		// 消耗卖盘档位。
 		remBefore := new(big.Rat).Set(rem)
 		trades, rem = ob.consumeLevelAsks(lv, rem, takerOrderID, takerUserID, trades)
-		// 本档全是自成交等导致一口都吃不到时，不得死循环；应挂出剩余买量。
-		if rem.Cmp(remBefore) == 0 {
-			break
+		if len(lv.orders) == 0 {
+			ob.asks = append(ob.asks[:i], ob.asks[i+1:]...)
+			continue
 		}
-		ob.trimEmptyFront(&ob.asks)
+		// 本档无可成交对手（常见于同用户），继续检查后续档位。
+		if rem.Cmp(remBefore) == 0 {
+			i++
+			continue
+		}
+		i++
 	}
 	return trades, rem
 }
@@ -156,20 +159,24 @@ func (ob *OrderBook) MatchLimitBuy(limitPrice *big.Rat, takerRem *big.Rat, taker
 func (ob *OrderBook) MatchLimitSell(limitPrice *big.Rat, takerRem *big.Rat, takerOrderID, takerUserID uint64) ([]Trade, *big.Rat) {
 	rem := new(big.Rat).Set(takerRem)
 	var trades []Trade
-	for rem.Sign() > 0 && len(ob.bids) > 0 {
-		lv := ob.bids[0]
+	for i := 0; rem.Sign() > 0 && i < len(ob.bids); {
+		lv := ob.bids[i]
 		// bidPrice < limitPrice → 买价太低，更优买档已吃完，停止吃单
 		if lv.price.Cmp(limitPrice) < 0 {
 			break
 		}
 		remBefore := new(big.Rat).Set(rem)
 		trades, rem = ob.consumeLevelBids(lv, rem, takerOrderID, takerUserID, trades)
-		// 如果剩余数量没有变化，则停止吃单。
-		if rem.Cmp(remBefore) == 0 {
-			break
+		if len(lv.orders) == 0 {
+			ob.bids = append(ob.bids[:i], ob.bids[i+1:]...)
+			continue
 		}
-		// 删除空挂单档位。
-		ob.trimEmptyFront(&ob.bids)
+		// 当前价位只有同用户单等不可成交时，继续检查后续档位。
+		if rem.Cmp(remBefore) == 0 {
+			i++
+			continue
+		}
+		i++
 	}
 	return trades, rem
 }
@@ -178,30 +185,97 @@ func (ob *OrderBook) MatchLimitSell(limitPrice *big.Rat, takerRem *big.Rat, take
 func (ob *OrderBook) MatchMarketBuy(takerRem *big.Rat, takerOrderID, takerUserID uint64) ([]Trade, *big.Rat) {
 	rem := new(big.Rat).Set(takerRem)
 	var trades []Trade
-	for rem.Sign() > 0 && len(ob.asks) > 0 {
-		lv := ob.asks[0]
+	for i := 0; rem.Sign() > 0 && i < len(ob.asks); {
+		lv := ob.asks[i]
 		remBefore := new(big.Rat).Set(rem)
 		trades, rem = ob.consumeLevelAsks(lv, rem, takerOrderID, takerUserID, trades)
-		if rem.Cmp(remBefore) == 0 {
-			break
+		if len(lv.orders) == 0 {
+			ob.asks = append(ob.asks[:i], ob.asks[i+1:]...)
+			continue
 		}
-		ob.trimEmptyFront(&ob.asks)
+		if rem.Cmp(remBefore) == 0 {
+			i++
+			continue
+		}
+		i++
 	}
 	return trades, rem
+}
+
+// MatchMarketBuyByQuote 市价买入（按报价币预算），返回成交列表与剩余预算。
+func (ob *OrderBook) MatchMarketBuyByQuote(quoteBudget *big.Rat, takerOrderID, takerUserID uint64) ([]Trade, *big.Rat) {
+	remQuote := new(big.Rat).Set(quoteBudget)
+	var trades []Trade
+	for i := 0; remQuote.Sign() > 0 && i < len(ob.asks); {
+		lv := ob.asks[i]
+		progressed := false
+		for remQuote.Sign() > 0 {
+			j := -1
+			for k, mk := range lv.orders {
+				if mk.UserID != takerUserID {
+					j = k
+					break
+				}
+			}
+			if j < 0 {
+				break
+			}
+			mk := lv.orders[j]
+			// 可买 base 上限 = 报价预算 / 当前价。
+			maxQtyByQuote := new(big.Rat).Quo(remQuote, lv.price)
+			if maxQtyByQuote.Sign() <= 0 {
+				break
+			}
+			q := rat.Min(maxQtyByQuote, mk.RemQty)
+			if q.Sign() <= 0 {
+				break
+			}
+			trades = append(trades, Trade{
+				MakerOrderID: mk.OrderID,
+				TakerOrderID: takerOrderID,
+				MakerUserID:  mk.UserID,
+				TakerUserID:  takerUserID,
+				Price:        new(big.Rat).Set(lv.price),
+				Quantity:     new(big.Rat).Set(q),
+			})
+			spent := new(big.Rat).Mul(lv.price, q)
+			remQuote.Sub(remQuote, spent)
+			mk.RemQty.Sub(mk.RemQty, q)
+			progressed = true
+			if mk.RemQty.Sign() == 0 {
+				lv.orders = append(lv.orders[:j], lv.orders[j+1:]...)
+			}
+		}
+		if len(lv.orders) == 0 {
+			ob.asks = append(ob.asks[:i], ob.asks[i+1:]...)
+			continue
+		}
+		if !progressed {
+			i++
+			continue
+		}
+		i++
+	}
+	return trades, remQuote
 }
 
 // MatchMarketSell 市价卖出：按买一价起连续吃单。
 func (ob *OrderBook) MatchMarketSell(takerRem *big.Rat, takerOrderID, takerUserID uint64) ([]Trade, *big.Rat) {
 	rem := new(big.Rat).Set(takerRem)
 	var trades []Trade
-	for rem.Sign() > 0 && len(ob.bids) > 0 {
-		lv := ob.bids[0]
+	for i := 0; rem.Sign() > 0 && i < len(ob.bids); {
+		lv := ob.bids[i]
 		remBefore := new(big.Rat).Set(rem)
 		trades, rem = ob.consumeLevelBids(lv, rem, takerOrderID, takerUserID, trades)
-		if rem.Cmp(remBefore) == 0 {
-			break
+		if len(lv.orders) == 0 {
+			ob.bids = append(ob.bids[:i], ob.bids[i+1:]...)
+			continue
 		}
-		ob.trimEmptyFront(&ob.bids)
+		if rem.Cmp(remBefore) == 0 {
+			i++
+			continue
+		}
+		i++
 	}
 	return trades, rem
 }
@@ -321,6 +395,7 @@ func (ob *OrderBook) SnapshotTop(limit int) (bids, asks []DepthSnapshotLevel) {
 	if limit <= 0 {
 		limit = 50
 	}
+	// 遍历买盘档位。
 	for _, lv := range ob.bids {
 		if len(bids) >= limit {
 			break
@@ -337,6 +412,7 @@ func (ob *OrderBook) SnapshotTop(limit int) (bids, asks []DepthSnapshotLevel) {
 			Qty:   rat.StringTrim(&sum),
 		})
 	}
+	// 遍历卖盘档位。
 	for _, lv := range ob.asks {
 		if len(asks) >= limit {
 			break
@@ -370,6 +446,35 @@ func (ob *OrderBook) HasRestingOrder(orderID uint64) bool {
 			if r.OrderID == orderID {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// RemoveRestingOrder 按订单 ID 从盘口移除挂单，返回是否实际移除。
+func (ob *OrderBook) RemoveRestingOrder(orderID uint64) bool {
+	for i, lv := range ob.bids {
+		for j, r := range lv.orders {
+			if r.OrderID != orderID {
+				continue
+			}
+			lv.orders = append(lv.orders[:j], lv.orders[j+1:]...)
+			if len(lv.orders) == 0 {
+				ob.bids = append(ob.bids[:i], ob.bids[i+1:]...)
+			}
+			return true
+		}
+	}
+	for i, lv := range ob.asks {
+		for j, r := range lv.orders {
+			if r.OrderID != orderID {
+				continue
+			}
+			lv.orders = append(lv.orders[:j], lv.orders[j+1:]...)
+			if len(lv.orders) == 0 {
+				ob.asks = append(ob.asks[:i], ob.asks[i+1:]...)
+			}
+			return true
 		}
 	}
 	return false

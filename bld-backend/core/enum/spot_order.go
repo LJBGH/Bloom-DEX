@@ -127,7 +127,7 @@ func (s SpotOrderStatus) Desc() string {
 	case SOS_Filled:
 		return "全部成交"
 	case SOS_Canceled:
-		return "已撤销"
+		return "已取消"
 	case SOS_Rejected:
 		return "已拒绝"
 	default:

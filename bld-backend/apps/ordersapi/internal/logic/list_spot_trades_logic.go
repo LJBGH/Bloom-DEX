@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"bld-backend/apps/ordersapi/internal/svc"
 	"bld-backend/apps/ordersapi/internal/types"
@@ -47,7 +48,7 @@ func (l *ListSpotTradesLogic) List(req *types.ListSpotTradesReq) (*types.ListSpo
 	items := make([]types.SpotTradeListItem, 0, len(rows))
 	for _, r := range rows {
 		items = append(items, types.SpotTradeListItem{
-			TradeId:   r.ID,
+			TradeId:   strconv.FormatUint(r.ID, 10),
 			MarketId:  r.MarketID,
 			Symbol:    r.Symbol,
 			Side:      r.Side,

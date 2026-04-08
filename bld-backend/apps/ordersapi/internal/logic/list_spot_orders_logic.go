@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"bld-backend/apps/ordersapi/internal/model"
@@ -66,7 +67,7 @@ func (l *ListSpotOrdersLogic) List(req *types.ListSpotOrdersReq) (*types.ListSpo
 
 func orderRowToItem(r model.UserSpotOrderRow) types.SpotOrderListItem {
 	it := types.SpotOrderListItem{
-		OrderId:           r.ID,
+		OrderId:           strconv.FormatUint(r.ID, 10),
 		MarketId:          r.MarketID,
 		Symbol:            r.Symbol,
 		BaseSymbol:        r.BaseSymbol,
@@ -74,7 +75,24 @@ func orderRowToItem(r model.UserSpotOrderRow) types.SpotOrderListItem {
 		Side:              r.Side,
 		OrderType:         r.OrderType,
 		AmountInputMode:   r.AmountInputMode,
+		TradeInputMode:    r.AmountInputMode,
 		Quantity:          r.Quantity,
+		FilledQuoteAmount: r.FilledQuoteAmount,
+		FilledTurnover:    r.FilledQuoteAmount,
+		MaxQuoteAmount: func() *string {
+			if !r.MaxQuoteAmount.Valid {
+				return nil
+			}
+			s := r.MaxQuoteAmount.String
+			return &s
+		}(),
+		MaxTurnover: func() *string {
+			if !r.MaxQuoteAmount.Valid {
+				return nil
+			}
+			s := r.MaxQuoteAmount.String
+			return &s
+		}(),
 		FilledQuantity:    r.FilledQuantity,
 		RemainingQuantity: r.RemainingQuantity,
 		Status:            r.Status,

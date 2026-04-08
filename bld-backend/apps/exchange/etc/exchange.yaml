@@ -14,6 +14,15 @@ Mysql:
 # 与 walletapi Rpc.ListenOn 一致，用于成交后 ApplySpotTrade；留空则不调用钱包。
 WalletRpc:
   Target: "127.0.0.1:9101"
+# 订单簿持久化
+WAL:
+  Enabled: true # 是否启用订单簿持久化
+  Path: "./apps/exchange/data/exchange.wal" # 订单簿持久化路径（从 bld-backend 工作目录启动）
+  CheckpointPath: "./apps/exchange/data/exchange.wal.ckpt" # WAL 恢复位点
+  Format: "binary" # 工业级二进制 WAL（不兼容旧 JSON WAL）
+  StrictRecovery: true # 仅回放 BEGIN/COMMIT 成对的完整事务
+  FlushIntervalMs: 10 # 订单簿持久化刷新间隔
+  QueueSize: 4096 # 订单簿持久化队列大小
 Kafka:
   Brokers:
     - localhost:9092

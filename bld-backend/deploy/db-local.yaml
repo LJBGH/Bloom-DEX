@@ -140,6 +140,31 @@ services:
     #command: ["redis-server", "--requirepass", "123456"]
     networks:
       - bld-dex
+
+  # ==============================
+  # MongoDB（文档数据库）
+  # ==============================
+  bld-mongodb:
+    image: mongo:7.0
+    container_name: bld-mongodb
+    restart: always
+    ports:
+      # 宿主机访问：mongodb://root:123456@localhost:27017
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: "123456"
+    volumes:
+      - ./data/mongodb/data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - bld-dex
+
   # ==============================
   # etcd（服务）
   # ==============================

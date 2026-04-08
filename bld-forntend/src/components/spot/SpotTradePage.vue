@@ -337,6 +337,12 @@ async function submitOrder() {
       } else {
         payload.reference_price = String(bookRef.bestAsk)
       }
+    } else if (
+      orderForm.order_type === 'MARKET' &&
+      orderForm.side === 'SELL' &&
+      marketSellMode.value === 'turnover'
+    ) {
+      payload.max_quote_amount = String(orderForm.market_sell_turnover || '').trim()
     }
     if (orderForm.order_type === 'MARKET') {
       payload.amount_input_mode =
