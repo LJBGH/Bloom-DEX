@@ -1,23 +1,26 @@
 package config
 
 type (
-	// RateLimitConf controls gateway rate limiting behavior.
+	// 限流配置
 	RateLimitConf struct {
-		// Mode: "off" | "memory" | "redis"
-		Mode string `json:",default=redis,options=off|memory|redis"`
+		// 模式: "off" | "memory" | "redis"
+		Mode string
 
-		// Default applies to most endpoints.
+		// 默认限流配置
 		Default RateSpec
-		// Strict applies to write endpoints like create/cancel order.
+		// 严格限流配置
 		Strict RateSpec
 
-		// KeyPrefix is used by redis limiter to build keys.
-		KeyPrefix string `json:",default=gw:rl:v1"`
+		// KeyPrefix 用于 redis 限流器构建键
+		KeyPrefix string
 	}
 
+	// 限流规格
 	RateSpec struct {
-		Rate  int `json:",default=50"`
-		Burst int `json:",default=100"`
+		// 速率: 每秒请求数
+		Rate int
+		// 突发: 最大并发请求数
+		Burst int
 	}
 )
 
