@@ -16,12 +16,12 @@ func RegisterHandlers(server *rest.Server, svcCtx *svc.ServiceContext) {
 			},
 			{
 				Method:  "POST",
-				Path:    "/v1/register",
+				Path:    "/api/userapi/v1/register",
 				Handler: RegisterHandler(svcCtx),
 			},
 			{
 				Method:  "POST",
-				Path:    "/v1/login",
+				Path:    "/api/userapi/v1/login",
 				Handler: LoginHandler(svcCtx),
 			},
 		},

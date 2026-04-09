@@ -21,27 +21,27 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 			},
 			{
 				Method:  http.MethodPost,
-				Path:    "/v1/spot/orders",
+				Path:    "/api/ordersapi/v1/spot/orders",
 				Handler: CreateSpotOrderHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodPost,
-				Path:    "/v1/spot/orders/cancel",
+				Path:    "/api/ordersapi/v1/spot/orders/cancel",
 				Handler: CancelSpotOrderHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodGet,
-				Path:    "/v1/spot/orders",
+				Path:    "/api/ordersapi/v1/spot/orders",
 				Handler: ListSpotOrdersHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodGet,
-				Path:    "/v1/spot/trades",
+				Path:    "/api/ordersapi/v1/spot/trades",
 				Handler: ListSpotTradesHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodGet,
-				Path:    "/v1/spot/markets",
+				Path:    "/api/ordersapi/v1/spot/markets",
 				Handler: ListSpotMarketsHandler(serverCtx),
 			},
 		},

@@ -2,7 +2,7 @@ import axios from 'axios'
 
 /** 与 vite 代理 `/marketws` → market-ws (9201) 对齐 */
 export const marketDepthHttp = axios.create({
-  baseURL: '/marketws',
+  baseURL: '/api/marketws',
   timeout: 8000,
 })
 
@@ -33,6 +33,7 @@ export function resolveMarketWsUrl() {
 
   const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = typeof window !== 'undefined' ? window.location.host : 'localhost:5173'
+  // Keep WS direct to market-ws for now (gateway doesn't proxy WS reliably).
   return `${proto}//${host}/marketws/ws`
 }
 

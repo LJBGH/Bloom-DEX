@@ -26,7 +26,7 @@ function logout() {
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-left">
-        <router-link class="brand" to="/home">Bloom DEX</router-link>
+        <router-link class="brand" to="/home">Bloom CEX</router-link>
         <nav class="nav" v-if="!isAuthPage">
           <router-link
             v-for="item in navItems"

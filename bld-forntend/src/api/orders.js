@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 export const ordersHttp = axios.create({
-  baseURL: '/ordersapi',
+  baseURL: '/api/ordersapi',
   timeout: 15000,
 })
 

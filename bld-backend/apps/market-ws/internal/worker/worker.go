@@ -95,7 +95,7 @@ func (w *Worker) Start() {
 		wsh.Serve(w.hub, rw, r)
 	})
 	// 处理深度请求
-	mux.HandleFunc("/api/v1/depth", func(rw http.ResponseWriter, r *http.Request) {
+	depthHandler := func(rw http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -127,10 +127,12 @@ func (w *Worker) Start() {
 		}
 		rw.Header().Set("Content-Type", "application/json")
 		_, _ = rw.Write(raw)
-	})
+	}
+	mux.HandleFunc("/api/v1/depth", depthHandler)
+	mux.HandleFunc("/api/marketws/api/v1/depth", depthHandler)
 
 	// 处理 K线历史请求
-	mux.HandleFunc("/api/v1/klines", func(rw http.ResponseWriter, r *http.Request) {
+	klinesHandler := func(rw http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -165,7 +167,9 @@ func (w *Worker) Start() {
 		}
 		rw.Header().Set("Content-Type", "application/json")
 		_, _ = rw.Write(raw)
-	})
+	}
+	mux.HandleFunc("/api/v1/klines", klinesHandler)
+	mux.HandleFunc("/api/marketws/api/v1/klines", klinesHandler)
 
 	// 启动 HTTP 服务器
 	addr := w.cfg.ListenOn

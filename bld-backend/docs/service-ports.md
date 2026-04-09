@@ -15,7 +15,7 @@
 
 ## 微服务
 
-``` 9003  gatewayapi
+``` 9003  gateway
     9004  userapi   (HTTP)
     9005  walletapi (HTTP)
     9006  ordersapi (HTTP)

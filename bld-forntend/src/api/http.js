@@ -1,12 +1,12 @@
 import axios from 'axios'
 
 export const userHttp = axios.create({
-  baseURL: '/userapi',
+  baseURL: '/api/userapi',
   timeout: 15000,
 })
 
 export const walletHttp = axios.create({
-  baseURL: '/walletapi',
+  baseURL: '/api/walletapi',
   timeout: 15000,
 })
 

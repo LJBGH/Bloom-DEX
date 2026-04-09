@@ -10,7 +10,8 @@ const props = defineProps({
 })
 
 const marketKlineHttp = axios.create({
-  baseURL: '/marketws',
+  // 统一走网关：/api/marketws -> market-ws(9201)
+  baseURL: '/api/marketws',
   timeout: 8000,
 })
 

@@ -74,8 +74,6 @@ Start-BackendApp 'userapi' 'userapi'
 Start-Sleep -Milliseconds 400
 Start-BackendApp 'ordersapi' 'ordersapi'
 Start-Sleep -Milliseconds 400
-Start-BackendApp 'gatewayapi' 'gatewayapi'
-Start-Sleep -Milliseconds 400
 
 if (-not $NoMarketWs) {
     Start-BackendApp 'market-ws' 'market-ws'
@@ -90,6 +88,9 @@ if (-not $NoExchange) {
 if (-not $NoChainMonitor) {
     Start-BackendApp 'chain-monitor' 'chain-monitor'
 }
+
+Start-BackendApp 'gateway' 'gateway'
+Start-Sleep -Milliseconds 400
 
 Write-Host "`nDone. Close each window to stop that service." -ForegroundColor Yellow
 Write-Host "Infra: docker compose -f deploy/db-local.yaml up -d`n" -ForegroundColor Yellow

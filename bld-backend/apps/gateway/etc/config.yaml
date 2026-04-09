@@ -1,0 +1,26 @@
+Name: gateway
+Log:
+  Stat: false
+Host: 0.0.0.0
+Port: 9003
+# 网关限流（可配置）
+RateLimit:
+  # off | memory | redis
+  Mode: redis
+  Default:
+    Rate: 50
+    Burst: 100
+  Strict:
+    Rate: 10
+    Burst: 20
+  KeyPrefix: gw:rl:v1
+# Redis（用于分布式限流等） //默认使用db0
+Redis:
+  Host: 127.0.0.1:6379
+  Type: node
+  Pass: ""
+# etcd 配置
+Etcd:
+  Hosts:
+    - 127.0.0.1:2379
+  Key: gateway

@@ -1,0 +1,97 @@
+# go-zero HTTP Gateway (HTTP->HTTP) config
+# Prefix policy (方案A):
+# NOTE: go-zero 的路由匹配是按「分段」匹配（只支持 `:var`），不支持 `*` 通配符。
+# 所以这里必须显式列出需要转发的路径。
+Upstreams:
+  - Name: ordersapi
+    Http:
+      Target: 127.0.0.1:9006
+      Timeout: 3000
+    Mappings:
+      - Method: GET
+        Path: /healthz
+      - Method: GET
+        Path: /api/ordersapi/v1/spot/orders
+      - Method: POST
+        Path: /api/ordersapi/v1/spot/orders
+      - Method: POST
+        Path: /api/ordersapi/v1/spot/orders/cancel
+      - Method: GET
+        Path: /api/ordersapi/v1/spot/trades
+      - Method: GET
+        Path: /api/ordersapi/v1/spot/markets
+      - Method: OPTIONS
+        Path: /api/ordersapi/v1/spot/orders
+      - Method: OPTIONS
+        Path: /api/ordersapi/v1/spot/orders/cancel
+      - Method: OPTIONS
+        Path: /api/ordersapi/v1/spot/trades
+      - Method: OPTIONS
+        Path: /api/ordersapi/v1/spot/markets
+
+  - Name: userapi
+    Http:
+      Target: 127.0.0.1:9004
+      Timeout: 3000
+    Mappings:
+      - Method: POST
+        Path: /api/userapi/v1/register
+      - Method: POST
+        Path: /api/userapi/v1/login
+      - Method: OPTIONS
+        Path: /api/userapi/v1/register
+      - Method: OPTIONS
+        Path: /api/userapi/v1/login
+
+  - Name: walletapi
+    Http:
+      Target: 127.0.0.1:9005
+      Timeout: 3000
+    Mappings:
+      - Method: GET
+        Path: /api/walletapi/v1/assets
+      - Method: GET
+        Path: /api/walletapi/v1/networks
+      - Method: GET
+        Path: /api/walletapi/v1/tokens
+      - Method: POST
+        Path: /api/walletapi/v1/wallet/create
+      - Method: POST
+        Path: /api/walletapi/v1/wallet/private-key
+      - Method: POST
+        Path: /api/walletapi/v1/deposit/address
+      - Method: POST
+        Path: /api/walletapi/v1/withdraw
+      - Method: POST
+        Path: /api/walletapi/v1/wallet/sweep/hot
+      - Method: OPTIONS
+        Path: /api/walletapi/v1/assets
+      - Method: OPTIONS
+        Path: /api/walletapi/v1/networks
+      - Method: OPTIONS
+        Path: /api/walletapi/v1/tokens
+      - Method: OPTIONS
+        Path: /api/walletapi/v1/wallet/create
+      - Method: OPTIONS
+        Path: /api/walletapi/v1/wallet/private-key
+      - Method: OPTIONS
+        Path: /api/walletapi/v1/deposit/address
+      - Method: OPTIONS
+        Path: /api/walletapi/v1/withdraw
+      - Method: OPTIONS
+        Path: /api/walletapi/v1/wallet/sweep/hot
+
+  - Name: marketws
+    Http:
+      Target: 127.0.0.1:9201
+      Timeout: 3000
+    Mappings:
+      - Method: GET
+        Path: /api/marketws/api/v1/depth
+      - Method: GET
+        Path: /api/marketws/api/v1/klines
+      - Method: OPTIONS
+        Path: /api/marketws/api/v1/depth
+      - Method: OPTIONS
+        Path: /api/marketws/api/v1/klines
+
