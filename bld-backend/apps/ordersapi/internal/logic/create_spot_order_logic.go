@@ -120,6 +120,14 @@ func (l *CreateSpotOrderLogic) CreateSpotOrder(req *types.CreateSpotOrderReq) (*
 		return nil, err
 	}
 
+	// 将订单 ID 添加到 Bloom 过滤器
+	if l.svcCtx.OrdersBF != nil {
+		if err := l.svcCtx.OrdersBF.AddString(l.ctx, strconv.FormatUint(orderID, 10)); err != nil {
+			// Bloom 仅用于加速判断，不应影响下单正确性
+			logx.Errorf("orders bloom add failed: order_id=%d err=%v", orderID, err)
+		}
+	}
+
 	if l.svcCtx.KafkaProducer == nil {
 		return nil, errors.New("kafka producer not initialized")
 	}

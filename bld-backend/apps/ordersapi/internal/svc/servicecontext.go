@@ -8,12 +8,14 @@ import (
 	"bld-backend/apps/ordersapi/internal/config"
 	"bld-backend/apps/ordersapi/internal/model"
 	"bld-backend/apps/ordersapi/internal/mq"
+	"bld-backend/core/util/bloom"
 	"bld-backend/core/util/snowflake"
 	"hash/fnv"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 	"github.com/zeromicro/go-zero/zrpc"
@@ -28,6 +30,9 @@ type ServiceContext struct {
 	IDGen           *snowflake.Generator
 
 	Wallet walletpb.WalletClient // Wallet 为 nil 表示未配置或初始化失败，下单时会拒绝。
+
+	Redis     *redis.Client
+	OrdersBF  *bloom.RedisBloom
 }
 
 // NewServiceContext 创建服务上下文
@@ -73,6 +78,36 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		}
 	}
 
+	// 初始化 Redis + 订单 Bloom（可选）
+	var rdb *redis.Client
+	var ordersBF *bloom.RedisBloom
+	if strings.TrimSpace(c.Redis.Addr) != "" {
+		rdb = redis.NewClient(&redis.Options{
+			Addr:     strings.TrimSpace(c.Redis.Addr),
+			Password: c.Redis.Password,
+			DB:       c.Redis.DB,
+		})
+		key := strings.TrimSpace(c.Bloom.OrdersKey)
+		if key == "" {
+			key = "bloom:orders"
+		}
+		n := c.Bloom.ExpectedInsertions
+		if n <= 0 {
+			n = 10_000_000
+		}
+		p := c.Bloom.FalsePositiveRate
+		if !(p > 0 && p < 1) {
+			p = 0.01
+		}
+		bf, err := bloom.NewRedisBloomWithEstimates(rdb, key, n, p)
+		if err != nil {
+			logx.Errorf("orders bloom init failed: %v", err)
+		} else {
+			ordersBF = bf
+			logx.Infof("orders bloom enabled: %s", bf.DebugInfo())
+		}
+	}
+
 	return &ServiceContext{
 		Config:           c,
 		SpotOrderModel:   model.NewSpotOrderModel(conn),
@@ -81,6 +116,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		KafkaProducer:   producer,
 		IDGen:           idgen,
 		Wallet:          walletCli,
+		Redis:           rdb,
+		OrdersBF:        ordersBF,
 	}
 }
 

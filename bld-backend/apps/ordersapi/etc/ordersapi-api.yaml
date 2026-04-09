@@ -21,3 +21,11 @@ Kafka:
   Topic: trade.order.create
   Partitions: 8
 SnowflakeNode: 1
+Redis:
+  Addr: 127.0.0.1:6379
+  Password: ""
+  DB: 10
+Bloom:
+  OrdersKey: bloom:orders
+  ExpectedInsertions: 10000000
+  FalsePositiveRate: 0.01

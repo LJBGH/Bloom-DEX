@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"bld-backend/apps/gateway/internal/config"
 
@@ -45,11 +47,57 @@ func (s *limiterStore) get(key string) *rate.Limiter {
 	return lim
 }
 
+type periodCounter struct {
+	sec   int64
+	count int
+}
+
+type periodStore struct {
+	quota int
+	mu    sync.Mutex
+	m     map[string]*periodCounter
+}
+
+func newPeriodStore(quota int) *periodStore {
+	return &periodStore{quota: quota, m: make(map[string]*periodCounter)}
+}
+
+func (s *periodStore) allow(key string, nowSec int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.m[key]
+	if !ok {
+		s.m[key] = &periodCounter{sec: nowSec, count: 1}
+		return true
+	}
+	if c.sec != nowSec {
+		c.sec = nowSec
+		c.count = 1
+		return true
+	}
+	if c.count >= s.quota {
+		return false
+	}
+	c.count++
+	return true
+}
+
 // RateLimitWithConf 内存令牌桶限流（单机）。
 func RateLimitWithConf(conf config.RateLimitConf) func(http.HandlerFunc) http.HandlerFunc {
 	conf = conf.Normalize()
-	defaultStore := newLimiterStore(limiterConfig{limit: rate.Limit(conf.Default.Rate), burst: conf.Default.Burst})
-	strictStore := newLimiterStore(limiterConfig{limit: rate.Limit(conf.Strict.Rate), burst: conf.Strict.Burst})
+	algo := strings.ToLower(strings.TrimSpace(conf.Algorithm))
+
+	// token bucket
+	defaultToken := newLimiterStore(limiterConfig{limit: rate.Limit(conf.Default.Rate), burst: conf.Default.Burst})
+	strictToken := newLimiterStore(limiterConfig{limit: rate.Limit(conf.Strict.Rate), burst: conf.Strict.Burst})
+
+	// fixed window (period seconds)
+	periodSec := int64(conf.PeriodSeconds)
+	if periodSec <= 0 {
+		periodSec = 1
+	}
+	defaultPeriod := newPeriodStore(conf.Default.Rate)
+	strictPeriod := newPeriodStore(conf.Strict.Rate)
 
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -79,17 +127,37 @@ func RateLimitWithConf(conf config.RateLimitConf) func(http.HandlerFunc) http.Ha
 			ip := clientIP(r)
 			group := routeGroup(path)
 
-			// 选择限流器存储
-			store := defaultStore
-			if group == "ordersapi.order_write" || (group == "ordersapi.orders" && r.Method == http.MethodPost) {
-				store = strictStore
-			}
 			// 构建限流器键
 			key := ip + "|" + group
+
 			// 检查是否允许请求
-			if !store.get(key).Allow() {
-				write429(w, group)
-				return
+			isStrict := group == "ordersapi.order_write" || (group == "ordersapi.orders" && r.Method == http.MethodPost)
+			switch algo {
+			case "period":
+				// 固定窗口：按 PeriodSeconds 对齐；Burst 不生效
+				nowSec := time.Now().Unix()
+				window := nowSec
+				if periodSec > 1 {
+					window = (nowSec / periodSec) * periodSec
+				}
+				store := defaultPeriod
+				if isStrict {
+					store = strictPeriod
+				}
+				if !store.allow(key+":"+strconv.FormatInt(window, 10), window) {
+					write429(w, group)
+					return
+				}
+			default:
+				// token bucket
+				store := defaultToken
+				if isStrict {
+					store = strictToken
+				}
+				if !store.get(key).Allow() {
+					write429(w, group)
+					return
+				}
 			}
 
 			next(w, r)

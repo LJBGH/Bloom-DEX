@@ -7,6 +7,10 @@ Port: 9003
 RateLimit:
   # off | memory | redis
   Mode: redis
+  # token | period
+  Algorithm: token
+  # 固定窗口周期（秒），仅 period 生效
+  PeriodSeconds: 1
   Default:
     Rate: 50
     Burst: 100

@@ -49,8 +49,19 @@ func (s *tokenLimiterStore) get(key string) *limit.TokenLimiter {
 // - Redis 异常：go-zero 内部会自动启用进程内 rescue limiter（不需要我们额外处理）
 func RedisRateLimitWithConf(rds *redis.Redis, conf config.RateLimitConf) func(http.HandlerFunc) http.HandlerFunc {
 	conf = conf.Normalize()
-	defaultStore := newTokenLimiterStore(conf.Default.Rate, conf.Default.Burst, rds)
-	strictStore := newTokenLimiterStore(conf.Strict.Rate, conf.Strict.Burst, rds)
+	algo := strings.ToLower(strings.TrimSpace(conf.Algorithm))
+
+	// token bucket
+	defaultToken := newTokenLimiterStore(conf.Default.Rate, conf.Default.Burst, rds)
+	strictToken := newTokenLimiterStore(conf.Strict.Rate, conf.Strict.Burst, rds)
+
+	// fixed window
+	period := conf.PeriodSeconds
+	if period <= 0 {
+		period = 1
+	}
+	defaultPeriod := limit.NewPeriodLimit(period, conf.Default.Rate, rds, conf.KeyPrefix+":period:")
+	strictPeriod := limit.NewPeriodLimit(period, conf.Strict.Rate, rds, conf.KeyPrefix+":period:")
 	prefix := conf.KeyPrefix
 
 	// 返回限流中间件
@@ -87,13 +98,28 @@ func RedisRateLimitWithConf(rds *redis.Redis, conf config.RateLimitConf) func(ht
 				ctx = context.Background()
 			}
 
-			store := defaultStore
-			if strict {
-				store = strictStore
-			}
-			if !store.get(key).AllowCtx(ctx) {
-				write429(w, group)
-				return
+			switch algo {
+			case "period":
+				// 固定窗口：每 period 秒最多 quota 次；Burst 不生效
+				pl := defaultPeriod
+				if strict {
+					pl = strictPeriod
+				}
+				state, err := pl.TakeCtx(ctx, key)
+				if err == nil && state == limit.OverQuota {
+					write429(w, group)
+					return
+				}
+			default:
+				// 令牌桶
+				store := defaultToken
+				if strict {
+					store = strictToken
+				}
+				if !store.get(key).AllowCtx(ctx) {
+					write429(w, group)
+					return
+				}
 			}
 
 			next(w, r)

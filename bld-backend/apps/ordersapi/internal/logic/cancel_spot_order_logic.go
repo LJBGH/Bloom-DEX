@@ -43,6 +43,17 @@ func (l *CancelSpotOrderLogic) CancelSpotOrder(req *types.CancelSpotOrderReq) (*
 		return nil, errors.New("invalid order_id")
 	}
 
+	// 检查订单 ID 是否在 Bloom 过滤器中，如果没有直接返回
+	if l.svcCtx.OrdersBF != nil {
+		ok, err := l.svcCtx.OrdersBF.ExistsString(l.ctx, strconv.FormatUint(orderID, 10))
+		if err != nil {
+			// Bloom 仅用于加速，不应因 Redis 异常导致无法撤单
+			logx.Errorf("orders bloom exists failed: order_id=%d err=%v", orderID, err)
+		} else if !ok {
+			return nil, errors.New("order not found")
+		}
+	}
+
 	row, err := l.svcCtx.SpotOrderModel.GetByIDAndUser(l.ctx, orderID, req.UserId)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -50,6 +61,7 @@ func (l *CancelSpotOrderLogic) CancelSpotOrder(req *types.CancelSpotOrderReq) (*
 		}
 		return nil, err
 	}
+
 	if row.OrderType != enum.Limit.String() {
 		return nil, errors.New("only LIMIT orders can be canceled")
 	}
@@ -106,6 +118,7 @@ func (l *CancelSpotOrderLogic) CancelSpotOrder(req *types.CancelSpotOrderReq) (*
 	}, nil
 }
 
+// 将 sql.NullString 转换为 *string
 func spotNullStringPtr(ns sql.NullString) *string {
 	if !ns.Valid {
 		return nil
