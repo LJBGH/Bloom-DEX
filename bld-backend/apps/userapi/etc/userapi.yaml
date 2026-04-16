@@ -3,6 +3,15 @@ Log:
   Stat: false
 Host: 0.0.0.0
 Port: 9004
+Telemetry:
+  Name: userapi-api         # 在追踪 UI 中显示的服务名称
+  Endpoint: localhost:4318  # 发送 trace 到你现有的 OTLP HTTP Collector（本地部署时 4318 已映射到宿主机）
+  Batcher: otlphttp         # HTTP 批处理器
+  Sampler: 1.0              # 1.0 = 100% 采样；高流量生产环境建议 0.1
+Prometheus:
+  Host: 0.0.0.0
+  Port: 9108
+  Path: /metrics
 Etcd:
   Hosts:
     - 127.0.0.1:2379

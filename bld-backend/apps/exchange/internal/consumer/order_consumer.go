@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"bld-backend/apps/exchange/internal/matcher"
@@ -11,6 +12,14 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/zeromicro/go-zero/core/logx"
+
+	ztrace "github.com/zeromicro/go-zero/core/trace"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/metadata"
 )
 
 // OrderHandler 处理单条 Kafka 订单消息。
@@ -40,16 +49,66 @@ func (h *OrderHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sara
 				sess.MarkMessage(msg, "")
 				continue
 			}
-			ctx := context.Background()
-			if err := h.Engine.HandleKafkaMessage(ctx, &m); err != nil {
+
+			parentCtx := sess.Context()
+			kctx, span := startKafkaConsumeSpan(parentCtx, msg)
+			logx.Info("trace_id:", span.SpanContext().TraceID().String())
+			logx.Info("span_id:", span.SpanContext().SpanID().String())
+			logx.Info("flags:", span.SpanContext().TraceFlags().String())
+
+			if err := h.Engine.HandleKafkaMessage(kctx, &m); err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				span.End()
 				logx.Errorf("exchange match order_id=%d: %v", m.OrderID, err)
 				continue
 			}
+			span.SetStatus(codes.Ok, "ok")
 			sess.MarkMessage(msg, "")
+			span.End()
 		case <-sess.Context().Done():
 			return nil
 		}
 	}
+}
+
+// startKafkaConsumeSpan 启动 Kafka 订单消费 span。
+func startKafkaConsumeSpan(ctx context.Context, msg *sarama.ConsumerMessage) (context.Context, trace.Span) {
+	// 构建 grpc metadata 头信息
+	md := metadata.New(nil)
+	// 注入 trace 头信息
+	for _, h := range msg.Headers {
+		if len(h.Key) == 0 {
+			continue
+		}
+		// grpc metadata 键名内部是小写
+		key := strings.ToLower(string(h.Key))
+		md.Set(key, string(h.Value))
+	}
+
+	// 提取 trace 头信息
+	bags, spanCtx := ztrace.Extract(ctx, otel.GetTextMapPropagator(), &md)
+	// 注入 baggage 头信息
+	ctx = baggage.ContextWithBaggage(ctx, bags)
+	// 创建一个 tracer
+	tr := otel.Tracer(ztrace.TraceName)
+	// 创建一个 span 名称
+	spanName := "kafka.consume"
+	if spanCtx.IsValid() {
+		ctx = trace.ContextWithRemoteSpanContext(ctx, spanCtx)
+	}
+
+	kafkaAttrs := []attribute.KeyValue{
+		attribute.String("messaging.system", "kafka"),
+		attribute.String("messaging.destination", msg.Topic),
+		attribute.Int("messaging.kafka.partition", int(msg.Partition)),
+	}
+
+	// NOTE: 使用 Consumer span kind 所以 tracing UIs 放在右侧
+	return tr.Start(ctx, spanName,
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(kafkaAttrs...),
+	)
 }
 
 // 启动 Kafka 订单消费者组。

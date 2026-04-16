@@ -22,17 +22,17 @@ import (
 )
 
 type ServiceContext struct {
-	Config           config.Config
-	SpotOrderModel   model.SpotOrderModel
-	SpotTradeModel   model.SpotTradeModel
-	SpotMarketModel  model.SpotMarketModel
+	Config          config.Config
+	SpotOrderModel  model.SpotOrderModel
+	SpotTradeModel  model.SpotTradeModel
+	SpotMarketModel model.SpotMarketModel
 	KafkaProducer   mq.KafkaSpotOrderProducer
 	IDGen           *snowflake.Generator
 
 	Wallet walletpb.WalletClient // Wallet 为 nil 表示未配置或初始化失败，下单时会拒绝。
 
-	Redis     *redis.Client
-	OrdersBF  *bloom.RedisBloom
+	Redis    *redis.Client
+	OrdersBF *bloom.RedisBloom
 }
 
 // NewServiceContext 创建服务上下文
@@ -109,10 +109,10 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 
 	return &ServiceContext{
-		Config:           c,
-		SpotOrderModel:   model.NewSpotOrderModel(conn),
-		SpotTradeModel:   model.NewSpotTradeModel(conn),
-		SpotMarketModel:  model.NewSpotMarketModel(conn),
+		Config:          c,
+		SpotOrderModel:  model.NewSpotOrderModel(conn),
+		SpotTradeModel:  model.NewSpotTradeModel(conn),
+		SpotMarketModel: model.NewSpotMarketModel(conn),
 		KafkaProducer:   producer,
 		IDGen:           idgen,
 		Wallet:          walletCli,
@@ -121,6 +121,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 }
 
+// walletRPCConfigured 钱包 RPC 配置是否正确
 func walletRPCConfigured(c zrpc.RpcClientConf) bool {
 	if len(c.Endpoints) > 0 || strings.TrimSpace(c.Target) != "" {
 		return true

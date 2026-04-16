@@ -39,8 +39,9 @@ func (w *Worker) Start() {
 
 func (w *Worker) Stop() {
 	select {
+	// 如果已经发送过关闭信号，则不再发送
 	case <-w.stop:
-		// already closed
+	// 关闭信号已发送，无需重复发送
 	default:
 		close(w.stop)
 	}
@@ -53,6 +54,7 @@ func (w *Worker) run() {
 	conn := sqlx.NewMysql(w.cfg.Mysql.DataSource)
 	// sqlx.SqlConn doesn't expose Close(); it should not be closed manually.
 
+	// 获取 network_id for "LOCALHOST"
 	networkID, err := w.getNetworkIDBySymbol(ctx, conn, "LOCALHOST")
 	if err != nil {
 		logx.Errorf("get network_id failed: %v", err)
@@ -66,17 +68,11 @@ func (w *Worker) run() {
 	}
 	defer evmClient.Close()
 
-	chainID, err := evmClient.ChainID(ctx)
-	if err != nil {
-		logx.Errorf("chainID failed: %v", err)
-		return
-	}
-
 	transferTopic0 := crypto.Keccak256Hash([]byte("Transfer(address,address,uint256)"))
 
 	chainKey := "EVM"
 
-	// Batch loop
+	// 循环扫描区块
 	for {
 		select {
 		case <-w.stop:
@@ -133,7 +129,7 @@ func (w *Worker) run() {
 		}
 
 		for b := from; b <= rangeEnd; b++ {
-			if err := w.processBlock(ctx, conn, evmClient, chainID, transferTopic0, custodyMap, ethAsset, usdtAsset, chainKey, b); err != nil {
+			if err := w.processBlock(ctx, conn, evmClient, transferTopic0, custodyMap, ethAsset, usdtAsset, chainKey, b); err != nil {
 				logx.Errorf("process block %d failed: %v", b, err)
 				// on error, stop this round to retry later
 				break
@@ -236,7 +232,6 @@ func (w *Worker) processBlock(
 	ctx context.Context,
 	conn sqlx.SqlConn,
 	evmClient *ethclient.Client,
-	chainID *big.Int,
 	transferTopic0 common.Hash,
 	custodyMap map[string]uint64,
 	ethAsset *assetRow,
@@ -244,7 +239,7 @@ func (w *Worker) processBlock(
 	chainKey string,
 	blockNum int64,
 ) error {
-	// ETH deposits: scan txs in block.
+	// 获取区块和交易
 	block, err := evmClient.BlockByNumber(ctx, big.NewInt(blockNum))
 	if err != nil {
 		return err

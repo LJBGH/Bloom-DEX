@@ -15,4 +15,4 @@ Mysql:
 EvmRPC: "http://127.0.0.1:8545"
 InitBlockHeight: 0
 Confirmation: 1
-PollIntervalSeconds: 5
+PollIntervalSeconds: 5 // 轮询间隔，单位为秒

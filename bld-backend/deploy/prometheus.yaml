@@ -1,7 +1,21 @@
+# Prometheus 配置文件
 global:
-  scrape_interval: 15s
+  scrape_interval: 15s # 全局抓取间隔，默认为 15 秒
 
+# 其他全局配置...
 scrape_configs:
-  - job_name: 'otel-collector'
+  - job_name: 'otel-collector' # 任务名称
     static_configs:
       - targets: ['bld-opentelemetry:8888']  # Docker 内部服务名 + 端口
+  - job_name: 'ordersapi'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:9106']
+  - job_name: 'walletapi'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:9107']
+  - job_name: 'userapi'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:9108']

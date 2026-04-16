@@ -8,15 +8,15 @@ import (
 )
 
 type Config struct {
-	Name   string `json:",default=chain-monitor"`
+	Name   string
 	Log    logx.LogConf
 	Etcd   etcdreg.Config
 	Mysql  sqlx.SqlConf
 	EvmRPC string
-	// InitBlockHeight is the first block number to scan when network_offsets doesn't exist.
+	// 初始化扫描的区块高度，默认为0，即从创世块开始扫描。
 	InitBlockHeight int64
-	// Confirmation ensures only credited after (latest-confirmation) >= current scan end.
+	// RequiredConfirmations 是一个整数，表示一个区块被认为是最终的所需的确认数。默认为12。
 	Confirmation int64
-	// PollIntervalSeconds is the sleep interval between scan loops.
+	// PollIntervalSeconds 是一个整数，表示区块监视器轮询区块链节点以检查新块的时间间隔（以秒为单位）。默认为10秒。
 	PollIntervalSeconds int64
 }

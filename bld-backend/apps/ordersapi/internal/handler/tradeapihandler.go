@@ -8,9 +8,11 @@ import (
 
 	"bld-backend/apps/ordersapi/internal/logic"
 	"bld-backend/apps/ordersapi/internal/svc"
+
 	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
+// TradeapiHandler 处理交易API相关的请求
 func TradeapiHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		l := logic.NewTradeapiLogic(r.Context(), svcCtx)
